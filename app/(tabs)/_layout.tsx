@@ -15,7 +15,9 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
         tabBarButton: HapticTab,
-      }}>
+      }}
+    >
+      {/* Home Tab */}
       <Tabs.Screen
         name="index"
         options={{
@@ -23,11 +25,22 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
         }}
       />
+
+      {/* Contactos Tab */}
       <Tabs.Screen
-        name="explore"
+        name="ContactList"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Contactos',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.2.fill" color={color} />,
+        }}
+      />
+
+      {/* Chats Tab */}
+      <Tabs.Screen
+        name="ChatList"
+        options={{
+          title: 'Chats',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="message.fill" color={color} />,
         }}
       />
     </Tabs>
