@@ -18,6 +18,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "permissions": ["NOTIFICATIONS"],
+      "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.jpastor.msgapp"
@@ -28,6 +30,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-notifications",
       [
         "expo-splash-screen",
         {
@@ -39,8 +42,15 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "@react-native-firebase/app"
     ],
+    "notification": {
+      "icon": "./assets/images/icon.png",
+      "color": "#1E88E5",
+      "androidMode": "default",
+      "androidCollapsedTitle": "Nueva notificación"
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

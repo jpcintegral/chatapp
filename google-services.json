@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "149546855821",
+    "project_id": "msgapp-5d7cb",
+    "storage_bucket": "msgapp-5d7cb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:149546855821:android:4cbf37dc24bab1fe5461c4",
+        "android_client_info": {
+          "package_name": "com.jpastor.msgapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDOgzIcBYI04YeTWIdsZMl7wnT-XPXCMC4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

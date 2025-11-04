@@ -37,7 +37,7 @@ export default function HomeScreen() {
     return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
   };
 
-  // 🧱 Agregar contacto propio y generar QR
+  //  Agregar contacto propio y generar QR
   const handleAddContact = async () => {
     const name = contactName.trim();
     if (!name) {

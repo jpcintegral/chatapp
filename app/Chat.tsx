@@ -96,7 +96,7 @@ export default function Chat() {
   useEffect(() => {
     if (!deviceId) return;
 
-    const socket = io('https://chatback.devscolima.com');
+    const socket = io('http://192.168.1.66:3100');
     socketRef.current = socket;
 
     socket.emit('joinChat', contact.linkKey);
