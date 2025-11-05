@@ -12,32 +12,45 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import QRCode from 'react-native-qrcode-svg';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
+import messaging from '@react-native-firebase/messaging';
 
 export default function HomeScreen() {
   const router = useRouter();
 
-  // 📱 Estados principales
   const [contactName, setContactName] = useState('');
-  const [linkKey, setLinkKey] = useState('');
   const [generatedKey, setGeneratedKey] = useState('');
   const [showQR, setShowQR] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [scannedKey, setScannedKey] = useState(''); // 🔹 Guarda el key escaneado
-  const [showAddFromQR, setShowAddFromQR] = useState(false); // 🔹 Muestra el modal para agregar desde QR
+  const [scannedKey, setScannedKey] = useState('');
+  const [showAddFromQR, setShowAddFromQR] = useState(false);
 
-  // 🎥 Permisos de cámara
   const [permission, requestPermission] = useCameraPermissions();
   useEffect(() => {
     if (!permission?.granted) requestPermission();
   }, [permission]);
 
-  // 🧩 Generar clave aleatoria de 6 caracteres
+  // 🔹 Función para registrar el linkKey con el token en el backend
+  const registerContactToken = async (linkKey: string) => {
+    try {
+      const token = await messaging().getToken();
+      const deviceId = await AsyncStorage.getItem('deviceId'); // tu deviceId local
+      c
+      await fetch('https://chatback.devscolima.com/api/register-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: deviceId, token,linkKey }),
+      });
+      console.log('Contacto registrado con token:', token);
+    } catch (error) {
+      console.error('Error registrando contacto:', error);
+    }
+  };
+
   const generateKey = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
   };
 
-  //  Agregar contacto propio y generar QR
   const handleAddContact = async () => {
     const name = contactName.trim();
     if (!name) {
@@ -60,20 +73,21 @@ export default function HomeScreen() {
     const updated = [...parsed, newContact];
     await AsyncStorage.setItem('contacts', JSON.stringify(updated));
 
+    // 🔹 Registrar el contacto en backend con token
+    await registerContactToken(key);
+
     setGeneratedKey(key);
     setContactName('');
     setShowQR(true);
   };
 
-  // 📷 Escanear QR y pedir nombre
   const handleBarCodeScanned = (result: BarcodeScanningResult) => {
     if (!result?.data) return;
     setShowScanner(false);
-    setScannedKey(result.data); // Guardamos el valor leído
-    setShowAddFromQR(true); // Mostramos el modal para pedir nombre
+    setScannedKey(result.data);
+    setShowAddFromQR(true);
   };
 
-  // 💾 Confirmar agregar contacto desde QR
   const handleConfirmAddFromQR = async () => {
     if (!contactName.trim()) {
       Alert.alert('Error', 'Debes ingresar un nombre para guardar el contacto.');
@@ -99,13 +113,15 @@ export default function HomeScreen() {
     const updated = [...parsed, newContact];
     await AsyncStorage.setItem('contacts', JSON.stringify(updated));
 
+    // 🔹 Registrar contacto escaneado en backend
+    await registerContactToken(scannedKey);
+
     setShowAddFromQR(false);
     setContactName('');
     Alert.alert('Éxito', `Se agregó el contacto: ${newContact.name}`);
   };
 
   if (!permission) return <Text>Solicitando permisos de cámara...</Text>;
-
   if (!permission.granted) {
     return (
       <View style={styles.centered}>
@@ -134,8 +150,6 @@ export default function HomeScreen() {
         <Button title="Escanear QR" onPress={() => setShowScanner(true)} />
       </View>
 
-
-      {/* 🔹 Modal para QR generado */}
       <Modal visible={showQR} transparent animationType="slide">
         <View style={styles.modal}>
           <Text style={{ marginBottom: 10 }}>Escanea este QR para vincular contacto</Text>
@@ -145,7 +159,6 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* 🔹 Modal para escáner */}
       <Modal visible={showScanner} animationType="slide">
         <CameraView
           style={{ flex: 1 }}
@@ -156,7 +169,6 @@ export default function HomeScreen() {
         <Button title="Cancelar" onPress={() => setShowScanner(false)} />
       </Modal>
 
-      {/* 🔹 Modal para agregar contacto escaneado */}
       <Modal visible={showAddFromQR} transparent animationType="slide">
         <View style={styles.modal}>
           <Text style={{ marginBottom: 10 }}>Se detectó un nuevo contacto</Text>

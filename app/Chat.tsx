@@ -13,6 +13,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams } from 'expo-router';
 import io, { Socket } from 'socket.io-client';
 import CryptoJS from 'crypto-js';
+import { useChat } from './ChatContext';
+
 
 interface Message {
   id: string;
@@ -48,6 +50,7 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const socketRef = useRef<Socket | null>(null);
+  const { setCurrentOpenChatLinkKey } = useChat();
 
   const secretKey = 'mi_clave_secreta_123';
 
@@ -70,6 +73,16 @@ export default function Chat() {
       tapTimeoutRef.current = setTimeout(() => setTapCount(0), 2000); // reinicio tras 2s
     }
   };
+
+useEffect(() => {
+  // Cuando se abre este chat, se actualiza el context
+  setCurrentOpenChatLinkKey(contact.linkKey);
+    console.log("contact.linkKey",contact.linkKey);
+  // Limpieza: al salir del chat, resetear
+  return () => {
+    setCurrentOpenChatLinkKey('');
+  };
+}, [contact.linkKey,setCurrentOpenChatLinkKey]);
 
   useEffect(() => {
     if (tapCount === 3) {
@@ -94,9 +107,11 @@ export default function Chat() {
 
   // 🔹 Conectar con backend vía Socket.IO
   useEffect(() => {
+
+    
     if (!deviceId) return;
 
-    const socket = io('http://192.168.1.66:3100');
+    const socket = io('https://chatback.devscolima.com');
     socketRef.current = socket;
 
     socket.emit('joinChat', contact.linkKey);
@@ -110,24 +125,45 @@ export default function Chat() {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     });
 
+    
     return () => socket.disconnect();
   }, [contact.key, deviceId]);
 
   // 🔹 Cargar chat desde AsyncStorage
-  useEffect(() => {
-    const loadChat = async () => {
-      try {
-        const stored = await AsyncStorage.getItem(storageKey);
-        if (stored) {
-          const parsed: ChatHistory = JSON.parse(stored);
-          setMessages(parsed.messages);
-        }
-      } catch (error) {
-        console.error('Error cargando chat:', error);
+ useEffect(() => {
+  const loadChat = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(storageKey);
+      if (stored) {
+        const parsed: ChatHistory = JSON.parse(stored);
+
+        // Filtrar mensajes menores a 1 hora
+        const oneHourAgo = Date.now() - 60 * 60 * 1000;
+        const filteredMessages = parsed.messages.filter(
+          m => m.timestamp > oneHourAgo
+        );
+
+        // Guardar el chat filtrado de nuevo
+        const updatedChat: ChatHistory = {
+          ...parsed,
+          messages: filteredMessages,
+          lastMessage: filteredMessages.length
+            ? filteredMessages[filteredMessages.length - 1].text
+            : '',
+          lastTimestamp: filteredMessages.length
+            ? filteredMessages[filteredMessages.length - 1].timestamp
+            : 0,
+        };
+        setMessages(filteredMessages);
+        await AsyncStorage.setItem(storageKey, JSON.stringify(updatedChat));
       }
-    };
-    loadChat();
-  }, [storageKey]);
+    } catch (error) {
+      console.error('Error cargando chat:', error);
+    }
+  };
+  loadChat();
+}, [storageKey]);
+
 
   // 🔹 Guardar chat siempre encriptado
   useEffect(() => {
