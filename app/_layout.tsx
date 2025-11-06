@@ -133,8 +133,8 @@ function RootLayoutWithListeners({ colorScheme }: { colorScheme: 'dark' | 'light
       // Mostrar notificación local
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: remoteMessage.notification?.title,
-          body: remoteMessage.notification?.body,
+          title: remoteMessage.data?.title,
+          body: remoteMessage.data?.body,
           priority: Notifications.AndroidNotificationPriority.HIGH,
         },
         trigger: null,
@@ -161,6 +161,7 @@ function RootLayoutWithListeners({ colorScheme }: { colorScheme: 'dark' | 'light
       chatHistory.messages.push(messageObj);
       chatHistory.lastMessage = messageObj.text;
       chatHistory.lastTimestamp = messageObj.timestamp;
+      chatHistory.unreadCount = (chatHistory.unreadCount ?? 0) + 1
 
       await AsyncStorage.setItem(storageKey, JSON.stringify(chatHistory));
     } else {

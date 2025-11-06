@@ -3,7 +3,17 @@ import messaging from '@react-native-firebase/messaging';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 
-
+ const getContactNameByLinkKey = async (linkKey: string): Promise<string> => {
+   try {
+     const storedContacts = await AsyncStorage.getItem('contacts');
+     const contacts = storedContacts ? JSON.parse(storedContacts) : [];
+     const contact = contacts.find((c: any) => c.linkKey === linkKey);
+     return contact ? contact.name : 'Contacto';
+   } catch (e) {
+     console.error('Error obteniendo nombre de contacto:', e);
+     return 'Contacto';
+   }
+ };
 
 messaging().setBackgroundMessageHandler(async remoteMessage => {
   console.log('📩 Mensaje recibido en background:', remoteMessage);
@@ -13,7 +23,7 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
   try {
     const messageObj = JSON.parse(mensajeData);
     const storageKey = `chat_${messageObj.linkKey}`;
-
+    const contactName = await getContactNameByLinkKey(messageObj.linkKey);
     const stored = await AsyncStorage.getItem(storageKey);
     let chatHistory = stored ? JSON.parse(stored) : null;
 
@@ -21,7 +31,7 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
       chatHistory = {
         contact: {
           id: messageObj.sender,
-          name: 'Contacto',
+          name: contactName,
           key: messageObj.sender,
           linkKey: messageObj.linkKey,
         },
@@ -34,14 +44,15 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
     chatHistory.messages.push(messageObj);
     chatHistory.lastMessage = messageObj.text;
     chatHistory.lastTimestamp = messageObj.timestamp;
+    chatHistory.unreadCount = (chatHistory.unreadCount ?? 0) + 1
 
     await AsyncStorage.setItem(storageKey, JSON.stringify(chatHistory));
 
     // Opcional: mostrar notificación local
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: remoteMessage.notification?.title,
-        body: remoteMessage.notification?.body,
+        title: remoteMessage.data?.title,
+        body: remoteMessage.data?.body,
         priority: Notifications.AndroidNotificationPriority.HIGH,
       },
       trigger: null,

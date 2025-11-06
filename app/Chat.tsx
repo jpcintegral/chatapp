@@ -21,6 +21,7 @@ interface Message {
   text: string;
   sender: string;
   timestamp: number;
+  unreadCount?: number;
 }
 
 interface ChatHistory {
@@ -58,6 +59,16 @@ export default function Chat() {
   const [isDecrypted, setIsDecrypted] = useState(false);
   const [tapCount, setTapCount] = useState(0);
   const tapTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const resetUnread = async (linkKey: string) => {
+  const key = `chat_${linkKey}`;
+  const stored = await AsyncStorage.getItem(key);
+  if (!stored) return;
+
+  const chatHistory: ChatHistory = JSON.parse(stored);
+  chatHistory.unreadCount = 0;
+  await AsyncStorage.setItem(key, JSON.stringify(chatHistory));
+};
 
   // 🔹 Manejo de toques en el encabezado
   const handleHeaderPress = () => {
@@ -191,6 +202,11 @@ useEffect(() => {
     };
     if (messages.length > 0) saveChat();
   }, [messages]);
+
+  useEffect(() => {
+  resetUnread(linkKey);
+}, []);
+
 
   // 🔹 Funciones de cifrado/descifrado
   const encryptMessage = (text: string) => {

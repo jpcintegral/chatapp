@@ -128,6 +128,11 @@ const deleteChat = (chat: ChatHistory) => {
                   {item.lastMessage}
                 </Text>
               </View>
+                {item.unreadCount > 0 && (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadText}>{item.unreadCount}</Text>
+                  </View>
+                )}
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => deleteChat(item)} style={{ padding: 8 }}>
@@ -177,4 +182,19 @@ const styles = StyleSheet.create({
     marginTop: 50,
     fontSize: 16,
   },
+  unreadBadge: {
+  backgroundColor: '#2b0000ff',
+  borderRadius: 10,
+  width: 20,
+  height: 20,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginLeft: 8,
+},
+unreadText: {
+  color: '#fff',
+  fontSize: 12,
+  fontWeight: 'bold',
+},
+
 });
