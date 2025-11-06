@@ -25,16 +25,31 @@ export default function HomeScreen() {
   const [showAddFromQR, setShowAddFromQR] = useState(false);
 
   const [permission, requestPermission] = useCameraPermissions();
-  useEffect(() => {
-    if (!permission?.granted) requestPermission();
-  }, [permission]);
+
+  
+useEffect(() => {
+  const checkPermission = async () => {
+    if (!permission) return;
+    if (!permission.granted) {
+      const response = await requestPermission();
+      if (response.granted) {
+        // 🔹 Fuerza una actualización del estado
+        setTimeout(() => {
+          console.log('Permiso de cámara otorgado');
+        }, 500);
+      }
+    }
+  };
+  checkPermission();
+}, [requestPermission]);
+
 
   // 🔹 Función para registrar el linkKey con el token en el backend
   const registerContactToken = async (linkKey: string) => {
     try {
       const token = await messaging().getToken();
       const deviceId = await AsyncStorage.getItem('deviceId'); // tu deviceId local
-      c
+    
       await fetch('https://chatback.devscolima.com/api/register-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

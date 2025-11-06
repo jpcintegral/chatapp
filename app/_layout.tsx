@@ -10,16 +10,12 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ChatProvider, useChat } from './ChatContext';
 
-
-// 🔥 Firebase imports
 import firebase from '@react-native-firebase/app';
 import messaging from '@react-native-firebase/messaging';
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+export const unstable_settings = { anchor: '(tabs)' };
 
-// 🔧 Configuración de notificaciones locales (Expo)
+// Configuración de notificaciones locales
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -30,7 +26,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// 🔹 Función para solicitar permisos en Android 13+
+// Solicitar permisos en Android 13+
 async function requestNotificationPermissionAndroid() {
   if (Platform.OS === 'android' && Platform.Version >= 33) {
     const granted = await PermissionsAndroid.request(
@@ -41,7 +37,6 @@ async function requestNotificationPermissionAndroid() {
         buttonPositive: 'Aceptar',
       }
     );
-
     if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
       Alert.alert('Permiso denegado', 'No se concedió permiso para notificaciones.');
       return false;
@@ -50,17 +45,43 @@ async function requestNotificationPermissionAndroid() {
   return true;
 }
 
+const getContactNameByLinkKey = async (linkKey: string): Promise<string> => {
+  try {
+    const storedContacts = await AsyncStorage.getItem('contacts');
+    const contacts = storedContacts ? JSON.parse(storedContacts) : [];
+    const contact = contacts.find((c: any) => c.linkKey === linkKey);
+    return contact ? contact.name : 'Contacto';
+  } catch (e) {
+    console.error('Error obteniendo nombre de contacto:', e);
+    return 'Contacto';
+  }
+};
+// 🔹 Componente RootLayout
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const [fcmToken, setFcmToken] = useState<string | null>(null);
-  const notificationListener = useRef<any>();
-  const responseListener = useRef<any>();
-  const [deviceId, setDeviceId] = useState<string>('');
-  const [linkKey , setLinkKey] = useState<string>('');
-  const { currentOpenChatLinkKey } = useChat();
-  
 
-  // 🔹 Inicializar Firebase (una sola vez)
+  // 🔹 ChatProvider envuelve todo para que el contexto esté disponible
+  return (
+    <ChatProvider>
+      <RootLayoutWithListeners colorScheme={colorScheme} />
+    </ChatProvider>
+  );
+}
+
+// 🔹 Componente interno que contiene los listeners
+function RootLayoutWithListeners({ colorScheme }: { colorScheme: 'dark' | 'light' }) {
+  const { currentOpenChatLinkKey } = useChat();
+  const currentOpenChatLinkKeyRef = useRef<string | null>(null);
+
+  const [deviceId, setDeviceId] = useState<string>('');
+  const [fcmToken, setFcmToken] = useState<string | null>(null);
+
+  // Mantener el valor del chat abierto actualizado
+  useEffect(() => {
+    currentOpenChatLinkKeyRef.current = currentOpenChatLinkKey;
+  }, [currentOpenChatLinkKey]);
+
+  // Inicializar Firebase
   useEffect(() => {
     if (!firebase.apps.length) {
       firebase.initializeApp();
@@ -68,7 +89,7 @@ export default function RootLayout() {
     }
   }, []);
 
-  // 🔹 Cargar o generar un identificador local del dispositivo
+  // Cargar o generar deviceId
   useEffect(() => {
     const loadDeviceId = async () => {
       let id = await AsyncStorage.getItem('deviceId');
@@ -77,91 +98,93 @@ export default function RootLayout() {
         await AsyncStorage.setItem('deviceId', id);
       }
       setDeviceId(id);
-      console.log()
-      const storedLinkKey = await AsyncStorage.getItem('linkKey');
-        console.log("storedLinkKey",storedLinkKey);
-    setLinkKey(storedLinkKey || '');
-      
     };
     loadDeviceId();
   }, []);
 
-  // 🔹 Configurar notificaciones con Firebase Cloud Messaging
- useEffect(() => {
-  let unsubscribeMessaging: (() => void) | null = null;
+  // Listener de FCM
+  useEffect(() => {
+    let unsubscribeMessaging: (() => void) | null = null;
 
-  const setupFirebaseMessaging = async () => {
-    const androidPermission = await requestNotificationPermissionAndroid();
-    if (!androidPermission) return;
+    const setupFirebaseMessaging = async () => {
+      const androidPermission = await requestNotificationPermissionAndroid();
+      if (!androidPermission) return;
 
-    const authStatus = await messaging().requestPermission();
-    const enabled =
-      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-    if (!enabled) return;
+      const authStatus = await messaging().requestPermission();
+      const enabled =
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+      if (!enabled) return;
 
-    const token = await messaging().getToken();
-    //console.log('🔥 FCM Token:', token);
-    setFcmToken(token);
+      const token = await messaging().getToken();
+      setFcmToken(token);
 
-    // Registrar listener solo una vez
-    unsubscribeMessaging = messaging().onMessage(async remoteMessage => {
-     // console.log('📩 Notificación recibida en foreground:', remoteMessage);
+     unsubscribeMessaging = messaging().onMessage(async remoteMessage => {
+  const mensajeData = remoteMessage.data?.mensaje;
+  if (!mensajeData) return;
 
+  try {
+    const messageObj = JSON.parse(mensajeData);
+
+    // ✅ Solo procesar si el chat abierto es diferente
+    if (currentOpenChatLinkKeyRef.current !== messageObj.linkKey) {
+       const contactName = await getContactNameByLinkKey(messageObj.linkKey);
+       
+      // Mostrar notificación local
       await Notifications.scheduleNotificationAsync({
         content: {
           title: remoteMessage.notification?.title,
           body: remoteMessage.notification?.body,
+          priority: Notifications.AndroidNotificationPriority.HIGH,
         },
         trigger: null,
       });
-     console.log("currentOpenChatLinkKey",currentOpenChatLinkKey);
-      const mensajeData = remoteMessage.data?.mensaje;
-      if (mensajeData) {
-         console.log("jose");
-        try {
-          const messageObj = JSON.parse(mensajeData);
-          const storageKey = `chat_${messageObj.linkKey}`;
-          const stored = await AsyncStorage.getItem(storageKey);
-          let chatHistory = stored ? JSON.parse(stored) : null;
 
-          if (!chatHistory) {
-            chatHistory = {
-              contact: {
-                id: messageObj.sender,
-                name: 'Contacto',
-                key: messageObj.sender,
-                linkKey: messageObj.linkKey,
-              },
-              messages: [],
-              lastMessage: '',
-              lastTimestamp: 0,
-            };
-          }
+      const storageKey = `chat_${messageObj.linkKey}`;
+      const stored = await AsyncStorage.getItem(storageKey);
+      let chatHistory = stored ? JSON.parse(stored) : null;
 
-          chatHistory.messages.push(messageObj);
-          chatHistory.lastMessage = messageObj.text;
-          chatHistory.lastTimestamp = messageObj.timestamp;
-
-          await AsyncStorage.setItem(storageKey, JSON.stringify(chatHistory));
-        } catch (e) {
-          console.error('Error guardando mensaje:', e);
-        }
+      if (!chatHistory) {
+        chatHistory = {
+          contact: {
+            id: messageObj.sender,
+            name: contactName,
+            key: messageObj.sender,
+            linkKey: messageObj.linkKey,
+          },
+          messages: [],
+          lastMessage: '',
+          lastTimestamp: 0,
+        };
       }
-    });
-  };
 
-  setupFirebaseMessaging();
+      chatHistory.messages.push(messageObj);
+      chatHistory.lastMessage = messageObj.text;
+      chatHistory.lastTimestamp = messageObj.timestamp;
 
-  return () => {
-    if (unsubscribeMessaging) unsubscribeMessaging();
-    if (notificationListener.current) notificationListener.current.remove();
-    if (responseListener.current) responseListener.current.remove();
-  };
-}, []); // 🔹 dejar array de dependencias vacío
+      await AsyncStorage.setItem(storageKey, JSON.stringify(chatHistory));
+    } else {
+      console.log('Chat abierto, no se agrega notificación ni push al storage');
+    }
+  } catch (e) {
+    console.error('Error procesando mensaje:', e);
+  }
+});
+
+
+
+    };
+
+
+     
+    setupFirebaseMessaging();
+
+    return () => {
+      if (unsubscribeMessaging) unsubscribeMessaging();
+    };
+  }, []);
 
   return (
-     <ChatProvider>
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -169,6 +192,5 @@ export default function RootLayout() {
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
-    </ChatProvider>
   );
 }

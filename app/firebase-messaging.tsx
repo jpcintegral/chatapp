@@ -3,11 +3,10 @@ import messaging from '@react-native-firebase/messaging';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 
-import { useChat } from './ChatContext';
+
 
 messaging().setBackgroundMessageHandler(async remoteMessage => {
   console.log('📩 Mensaje recibido en background:', remoteMessage);
-     console.log("currentOpenChatLinkKey",currentOpenChatLinkKey);
   const mensajeData = remoteMessage.data?.mensaje;
   if (!mensajeData) return;
 
