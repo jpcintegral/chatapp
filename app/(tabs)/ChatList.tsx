@@ -1,8 +1,11 @@
+import '../firebase-messaging';
 import React, { useState, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+
 
 // 🔹 Interfaces compartidas con Chat
 interface Message {
@@ -22,7 +25,7 @@ interface ChatHistory {
 export default function ChatList() {
   const router = useRouter();
   const [chats, setChats] = useState<ChatHistory[]>([]);
-
+  const { onlineUsers } = useOnlineStatus();
   useFocusEffect(
     useCallback(() => {
       loadChats();
@@ -65,7 +68,8 @@ export default function ChatList() {
 
       // 🔹 Ordenar por último mensaje
       uniqueChats.sort((a, b) => b.lastTimestamp - a.lastTimestamp);
-
+      
+      //console.log('🔍 Chats cargados:', JSON.stringify(uniqueChats, null, 2));
       setChats(uniqueChats);
     } catch (error) {
       console.error('Error cargando chats:', error);
@@ -121,6 +125,17 @@ const deleteChat = (chat: ChatHistory) => {
             >
               <View style={styles.iconContainer}>
                 <Ionicons name="person" size={26} color="#fff" />
+                {/*<View
+                  style={{
+                    position: 'absolute',
+                    bottom: 4,
+                    right: 4,
+                    width: 10,
+                    height: 10,
+                    borderRadius: 5,
+                    backgroundColor: onlineUsers[item.contact.linkKey] ? '#00C853' : '#9E9E9E',
+                  }}
+                /> */} 
               </View>
               <View style={styles.textContainer}>
                 <Text style={styles.contactName}>{item.contact.name}</Text>

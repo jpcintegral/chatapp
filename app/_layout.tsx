@@ -87,6 +87,23 @@ function RootLayoutWithListeners({ colorScheme }: { colorScheme: 'dark' | 'light
       firebase.initializeApp();
       console.log('✅ Firebase inicializado');
     }
+    // Cuando la app se abre desde una notificación en background o cerrada
+  const unsubscribeOpened = messaging().onNotificationOpenedApp(async remoteMessage => {
+    console.log(' App abierta desde notificación:', remoteMessage);
+    await handleIncomingMessage(remoteMessage);
+  });
+
+  // Cuando la app se inicia desde un estado cerrado (killed)
+  messaging()
+    .getInitialNotification()
+    .then(async remoteMessage => {
+      if (remoteMessage) {
+        console.log(' App lanzada por una notificación:', remoteMessage);
+        await handleIncomingMessage(remoteMessage);
+      }
+    });
+
+  return unsubscribeOpened;
   }, []);
 
   // Cargar o generar deviceId

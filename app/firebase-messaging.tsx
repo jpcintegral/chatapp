@@ -58,9 +58,50 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
       trigger: null,
     });
 
-    console.log('✅ Mensaje guardado en background', storageKey);
+    console.log(' Mensaje guardado en background', storageKey);
 
   } catch (e) {
-    console.error('❌ Error guardando mensaje en background:', e);
+    console.error(' Error guardando mensaje en background:', e);
   }
 });
+
+
+export  const handleIncomingMessage = async (remoteMessage: any) => {
+  try {
+    const mensajeData = remoteMessage.data?.mensaje;
+    if (!mensajeData) return;
+
+    const messageObj = JSON.parse(mensajeData);
+    const contactName = await getContactNameByLinkKey(messageObj.linkKey);
+    const storageKey = `chat_${messageObj.linkKey}`;
+
+    const stored = await AsyncStorage.getItem(storageKey);
+    let chatHistory = stored ? JSON.parse(stored) : null;
+
+    if (!chatHistory) {
+      chatHistory = {
+        contact: {
+          id: messageObj.sender,
+          name: contactName,
+          key: messageObj.sender,
+          linkKey: messageObj.linkKey,
+        },
+        messages: [],
+        lastMessage: '',
+        lastTimestamp: 0,
+      };
+    }
+
+    chatHistory.messages.push(messageObj);
+    chatHistory.lastMessage = messageObj.text;
+    chatHistory.lastTimestamp = messageObj.timestamp;
+    chatHistory.unreadCount = (chatHistory.unreadCount ?? 0) + 1;
+
+    await AsyncStorage.setItem(storageKey, JSON.stringify(chatHistory));
+    console.log(' Mensaje guardado al abrir la notificación');
+  } catch (e) {
+    console.error('Error procesando mensaje tras abrir la notificación:', e);
+  }
+};
+
+

@@ -1,3 +1,4 @@
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -14,6 +15,7 @@ import { useLocalSearchParams } from 'expo-router';
 import io, { Socket } from 'socket.io-client';
 import CryptoJS from 'crypto-js';
 import { useChat } from './ChatContext';
+import { KeyboardAwareFlatList } from 'react-native-keyboard-aware-scroll-view';
 
 
 interface Message {
@@ -48,14 +50,16 @@ export default function Chat() {
   };
   const storageKey = `chat_${contact.linkKey}`;
   const [deviceId, setDeviceId] = useState<string>('');
+  const { isOnline } = useOnlineStatus(contact.id);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const socketRef = useRef<Socket | null>(null);
   const { setCurrentOpenChatLinkKey } = useChat();
+  const [inputHeight, setInputHeight] = useState(40);
 
   const secretKey = 'mi_clave_secreta_123';
 
-  // 🔹 Control de estado de desencriptado
+  //   Control de estado de desencriptado
   const [isDecrypted, setIsDecrypted] = useState(false);
   const [tapCount, setTapCount] = useState(0);
   const tapTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -70,7 +74,7 @@ export default function Chat() {
   await AsyncStorage.setItem(key, JSON.stringify(chatHistory));
 };
 
-  // 🔹 Manejo de toques en el encabezado
+  //   Manejo de toques en el encabezado
   const handleHeaderPress = () => {
     if (isDecrypted) {
       // Si ya está desencriptado, un toque lo vuelve a encriptar
@@ -88,7 +92,6 @@ export default function Chat() {
 useEffect(() => {
   // Cuando se abre este chat, se actualiza el context
   setCurrentOpenChatLinkKey(contact.linkKey);
-    console.log("contact.linkKey",contact.linkKey);
   // Limpieza: al salir del chat, resetear
   return () => {
     setCurrentOpenChatLinkKey('');
@@ -103,7 +106,7 @@ useEffect(() => {
     }
   }, [tapCount]);
 
-  // 🔹 Generar o cargar deviceId único
+  //   Generar o cargar deviceId único
   useEffect(() => {
     const loadDeviceId = async () => {
       let id = await AsyncStorage.getItem('deviceId');
@@ -116,7 +119,7 @@ useEffect(() => {
     loadDeviceId();
   }, []);
 
-  // 🔹 Conectar con backend vía Socket.IO
+  //   Conectar con backend vía Socket.IO
   useEffect(() => {
 
     
@@ -140,43 +143,63 @@ useEffect(() => {
     return () => socket.disconnect();
   }, [contact.key, deviceId]);
 
-  // 🔹 Cargar chat desde AsyncStorage
- useEffect(() => {
+  //   Cargar chat desde AsyncStorage
+useEffect(() => {
   const loadChat = async () => {
     try {
       const stored = await AsyncStorage.getItem(storageKey);
-      if (stored) {
-        const parsed: ChatHistory = JSON.parse(stored);
+      if (!stored) return;
 
-        // Filtrar mensajes menores a 1 hora
-        const oneHourAgo = Date.now() - 60 * 60 * 1000;
-        const filteredMessages = parsed.messages.filter(
-          m => m.timestamp > oneHourAgo
-        );
+      const parsed: ChatHistory = JSON.parse(stored);
 
-        // Guardar el chat filtrado de nuevo
-        const updatedChat: ChatHistory = {
-          ...parsed,
-          messages: filteredMessages,
-          lastMessage: filteredMessages.length
-            ? filteredMessages[filteredMessages.length - 1].text
-            : '',
-          lastTimestamp: filteredMessages.length
-            ? filteredMessages[filteredMessages.length - 1].timestamp
-            : 0,
-        };
-        setMessages(filteredMessages);
-        await AsyncStorage.setItem(storageKey, JSON.stringify(updatedChat));
+      //   Filtrar mensajes que aún son válidos (última hora)
+      const oneHourAgo = Date.now() - 60 * 60 * 1000;
+      const filteredMessages = parsed.messages.filter(m => m.timestamp > oneHourAgo);
+
+      //   Si ya no hay mensajes válidos → eliminar completamente el chat
+      if (filteredMessages.length === 0) {
+        console.log("storageKey",storageKey);
+        await AsyncStorage.removeItem(storageKey);
+        console.log(`Chat ${storageKey} eliminado (sin mensajes recientes)`);
+        setMessages([]); // limpiar también del estado
+
+        const existing = await AsyncStorage.getItem(storageKey);
+        console.log('Antes de eliminar:', storageKey, existing);
+        await AsyncStorage.removeItem(storageKey);
+        //const check = await AsyncStorage.getItem(storageKey);
+        //console.log('Después de eliminar:', check);
+
+        return;
       }
+
+      //  Si quedan mensajes válidos → guardar versión actualizada
+      const updatedChat: ChatHistory = {
+        ...parsed,
+        messages: filteredMessages,
+        lastMessage: filteredMessages[filteredMessages.length - 1].text,
+        lastTimestamp: filteredMessages[filteredMessages.length - 1].timestamp,
+      };
+      
+      console.log("updatedChat",JSON.stringify(updatedChat, null, 2))
+      //   Guardar los mensajes filtrados en AsyncStorage
+      await AsyncStorage.setItem(storageKey, JSON.stringify(updatedChat));
+
+      //   Mostrar solo los mensajes filtrados en la vista
+      setMessages(filteredMessages);
+
+      console.log(`  Chat ${storageKey} actualizado (${filteredMessages.length} mensajes restantes)`);
+
     } catch (error) {
       console.error('Error cargando chat:', error);
     }
   };
+
   loadChat();
 }, [storageKey]);
 
 
-  // 🔹 Guardar chat siempre encriptado
+
+  //   Guardar chat siempre encriptado
   useEffect(() => {
     const saveChat = async () => {
       try {
@@ -208,7 +231,8 @@ useEffect(() => {
 }, []);
 
 
-  // 🔹 Funciones de cifrado/descifrado
+
+  //   Funciones de cifrado/descifrado
   const encryptMessage = (text: string) => {
     try {
       const iv = CryptoJS.enc.Utf8.parse(secretKey.substring(0, 16));
@@ -231,7 +255,7 @@ useEffect(() => {
     }
   };
 
-  // 🔹 Enviar mensaje
+  //   Enviar mensaje
   const sendMessage = () => {
     if (!input.trim() || !socketRef.current || !deviceId) return;
 
@@ -262,13 +286,14 @@ useEffect(() => {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={80}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <TouchableOpacity onPress={handleHeaderPress}>
         <Text style={styles.header}>
           {isDecrypted ? contact.name : encryptMessage(contact.name)}
         </Text>
+         
       </TouchableOpacity>
 
       <FlatList
@@ -309,7 +334,7 @@ useEffect(() => {
             </View>
           );
         }}
-        contentContainerStyle={{ paddingVertical: 10 }}
+        contentContainerStyle={{ paddingVertical: 10, paddingBottom: 60 }}
       />
 
       <View style={styles.inputContainer}>
@@ -317,7 +342,10 @@ useEffect(() => {
           value={input}
           onChangeText={setInput}
           placeholder="Escribe un mensaje..."
-          style={styles.input}
+          style={[styles.input, { height: Math.min(120, inputHeight) }]}
+            onContentSizeChange={(event) => {
+                setInputHeight(event.nativeEvent.contentSize.height);
+              }}
         />
         <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
           <Text style={styles.sendText}>Enviar</Text>
@@ -352,29 +380,48 @@ const styles = StyleSheet.create({
   myMessageText: { color: '#000', fontSize: 16 },
   contactMessageText: { color: '#333', fontSize: 16 },
   timestamp: { fontSize: 10, color: '#888', alignSelf: 'flex-end', marginTop: 4 },
-  inputContainer: {
+ inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderTopWidth: 1,
-    borderColor: '#ccc',
-    paddingVertical: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderColor: '#ddd',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
   },
   input: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: '#ccc',
+    backgroundColor: '#f1f1f1',
     borderRadius: 25,
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    marginRight: 8,
-    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 8,
+    fontSize: 16,
+    color: '#333',
   },
   sendButton: {
     backgroundColor: '#34B7F1',
     borderRadius: 25,
-    paddingHorizontal: 15,
-    paddingVertical: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    marginLeft: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  sendText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  sendText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+
+  
 });
