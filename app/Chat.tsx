@@ -1,5 +1,5 @@
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,11 +11,12 @@ import {
   Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import io, { Socket } from 'socket.io-client';
 import CryptoJS from 'crypto-js';
 import { useChat } from './ChatContext';
 import { KeyboardAwareFlatList } from 'react-native-keyboard-aware-scroll-view';
+
 
 
 interface Message {
@@ -23,14 +24,14 @@ interface Message {
   text: string;
   sender: string;
   timestamp: number;
-  unreadCount?: number;
 }
 
 interface ChatHistory {
   contact: { id: string; name: string; key: string; linkKey: string };
   messages: Message[];
   lastTimestamp: number;
-  lastMessage: string;
+  lastMessage: string;  
+  unreadCount: number;
 }
 
 export default function Chat() {
@@ -54,7 +55,7 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const socketRef = useRef<Socket | null>(null);
-  const { setCurrentOpenChatLinkKey } = useChat();
+  const { setCurrentOpenChatLinkKey, updateChatFromStorage  } = useChat();
   const [inputHeight, setInputHeight] = useState(40);
 
   const secretKey = 'mi_clave_secreta_123';
@@ -88,6 +89,11 @@ export default function Chat() {
       tapTimeoutRef.current = setTimeout(() => setTapCount(0), 2000); // reinicio tras 2s
     }
   };
+
+  const sortMessages = (arr: Message[]) => {
+  return arr.sort((a, b) => a.timestamp - b.timestamp);
+};
+
 
 useEffect(() => {
   // Cuando se abre este chat, se actualiza el context
@@ -133,10 +139,22 @@ useEffect(() => {
     
 
     socket.on('receiveMessage', (msg: Message) => {
-      setMessages(prev =>
-        prev.some(m => m.id === msg.id) ? prev : [...prev, msg]
-      );
+        setMessages(prev => {
+            const newList = prev.some(m => m.id === msg.id)
+              ? prev
+              : [...prev, msg];
+
+            return sortMessages([...newList]);
+          });
+       updateChatFromStorage({
+        contact,
+        messages: [msg],
+        lastMessage: msg.text,
+        lastTimestamp: msg.timestamp
+      });
+      
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+   
     });
 
     
@@ -183,9 +201,10 @@ useEffect(() => {
       console.log("updatedChat",JSON.stringify(updatedChat, null, 2))
       //   Guardar los mensajes filtrados en AsyncStorage
       await AsyncStorage.setItem(storageKey, JSON.stringify(updatedChat));
+      updateChatFromStorage(parsed);
 
       //   Mostrar solo los mensajes filtrados en la vista
-      setMessages(filteredMessages);
+      setMessages(sortMessages(filteredMessages));
 
       console.log(`  Chat ${storageKey} actualizado (${filteredMessages.length} mensajes restantes)`);
 
@@ -217,6 +236,7 @@ useEffect(() => {
           })),
           lastMessage: lastMessage ? encryptMessage(decryptMessage(lastMessage.text)) : '',
           lastTimestamp: lastMessage ? lastMessage.timestamp : 0,
+          unreadCount: 0,
         };
         await AsyncStorage.setItem(storageKey, JSON.stringify(chatData));
       } catch (error) {
@@ -230,7 +250,27 @@ useEffect(() => {
   resetUnread(linkKey);
 }, []);
 
+useFocusEffect(
+  useCallback(() => {
+    const reloadMessages = async () => {
+      const stored = await AsyncStorage.getItem(storageKey);
+      if (!stored) return;
 
+      const parsed: ChatHistory = JSON.parse(stored);
+
+      // evitar duplicados
+      const newMessages = parsed.messages.filter(
+        m => !messages.some(msg => msg.id === m.id)
+      );
+
+      if (newMessages.length > 0) {
+        setMessages(prev => sortMessages([...prev, ...newMessages]));
+      }
+    };
+
+    reloadMessages();
+  }, [storageKey, messages])
+);
 
   //   Funciones de cifrado/descifrado
   const encryptMessage = (text: string) => {
@@ -268,7 +308,7 @@ useEffect(() => {
       timestamp: Date.now(),
     };
 
-    setMessages(prev => [...prev, newMessage]);
+    setMessages(prev => sortMessages([...prev, newMessage]));
     setInput('');
 
     socketRef.current.emit('sendMessage', {

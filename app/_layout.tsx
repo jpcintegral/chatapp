@@ -1,4 +1,5 @@
-import './firebase-messaging';
+import { handleIncomingMessage  } from './firebase-messaging';
+
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -8,7 +9,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform, Alert, PermissionsAndroid } from 'react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ChatProvider, useChat } from './ChatContext';
+import { ChatProvider, useChat   } from './ChatContext';
 
 import firebase from '@react-native-firebase/app';
 import messaging from '@react-native-firebase/messaging';
@@ -70,11 +71,32 @@ export default function RootLayout() {
 
 // 🔹 Componente interno que contiene los listeners
 function RootLayoutWithListeners({ colorScheme }: { colorScheme: 'dark' | 'light' }) {
-  const { currentOpenChatLinkKey } = useChat();
+  const { currentOpenChatLinkKey, updateChatFromStorage, reloadChatsFromStorage   } = useChat();
   const currentOpenChatLinkKeyRef = useRef<string | null>(null);
 
   const [deviceId, setDeviceId] = useState<string>('');
   const [fcmToken, setFcmToken] = useState<string | null>(null);
+
+
+  useEffect(() => {
+  const loadPendingMessages = async () => {
+    const keys = await AsyncStorage.getAllKeys();
+    const chatKeys = keys.filter(k => k.startsWith('chat_'));
+
+    for (let key of chatKeys) {
+      const stored = await AsyncStorage.getItem(key);
+      if (!stored) continue;
+
+      const chatHistory = JSON.parse(stored);
+
+      // Actualiza el Context SIN duplicados
+      updateChatFromStorage(chatHistory);
+    }
+  };
+
+  loadPendingMessages();
+}, []);
+
 
   // Mantener el valor del chat abierto actualizado
   useEffect(() => {
@@ -101,7 +123,11 @@ function RootLayoutWithListeners({ colorScheme }: { colorScheme: 'dark' | 'light
         console.log(' App lanzada por una notificación:', remoteMessage);
         await handleIncomingMessage(remoteMessage);
       }
+
+      reloadChatsFromStorage();
     });
+
+     reloadChatsFromStorage();
 
   return unsubscribeOpened;
   }, []);
@@ -174,7 +200,9 @@ function RootLayoutWithListeners({ colorScheme }: { colorScheme: 'dark' | 'light
           lastTimestamp: 0,
         };
       }
-
+ 
+      const exists = chatHistory.messages.some(m => m.id === messageObj.id);
+      if(exists) return;
       chatHistory.messages.push(messageObj);
       chatHistory.lastMessage = messageObj.text;
       chatHistory.lastTimestamp = messageObj.timestamp;

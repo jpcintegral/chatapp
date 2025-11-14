@@ -21,11 +21,24 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
   if (!mensajeData) return;
 
   try {
+
+     // Opcional: mostrar notificación local
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: remoteMessage.data?.title,
+        body: remoteMessage.data?.body,
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      },
+      trigger: null,
+    });
+
     const messageObj = JSON.parse(mensajeData);
     const storageKey = `chat_${messageObj.linkKey}`;
     const contactName = await getContactNameByLinkKey(messageObj.linkKey);
     const stored = await AsyncStorage.getItem(storageKey);
     let chatHistory = stored ? JSON.parse(stored) : null;
+
+      
 
     if (!chatHistory) {
       chatHistory = {
@@ -41,6 +54,10 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
       };
     }
 
+
+   
+     const exists = chatHistory.messages.some(m => m.id === messageObj.id);
+      if(exists) return;
     chatHistory.messages.push(messageObj);
     chatHistory.lastMessage = messageObj.text;
     chatHistory.lastTimestamp = messageObj.timestamp;
@@ -48,15 +65,7 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
 
     await AsyncStorage.setItem(storageKey, JSON.stringify(chatHistory));
 
-    // Opcional: mostrar notificación local
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: remoteMessage.data?.title,
-        body: remoteMessage.data?.body,
-        priority: Notifications.AndroidNotificationPriority.HIGH,
-      },
-      trigger: null,
-    });
+  
 
     console.log(' Mensaje guardado en background', storageKey);
 
@@ -91,7 +100,9 @@ export  const handleIncomingMessage = async (remoteMessage: any) => {
         lastTimestamp: 0,
       };
     }
-
+ 
+     const exists = chatHistory.messages.some(m => m.id === messageObj.id);
+      if(exists) return;
     chatHistory.messages.push(messageObj);
     chatHistory.lastMessage = messageObj.text;
     chatHistory.lastTimestamp = messageObj.timestamp;

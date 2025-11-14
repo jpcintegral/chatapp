@@ -20,6 +20,7 @@ interface ChatHistory {
   messages: Message[];
   lastTimestamp: number;
   lastMessage: string;
+  unreadCount: number;
 }
 
 export default function ChatList() {
