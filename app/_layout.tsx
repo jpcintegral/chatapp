@@ -1,6 +1,10 @@
-import { handleIncomingMessage  } from './firebase-messaging';
+import { handleIncomingMessage } from './firebase-messaging';
 
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import {
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
+} from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
@@ -9,7 +13,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform, Alert, PermissionsAndroid } from 'react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ChatProvider, useChat   } from './ChatContext';
+import { ChatProvider, useChat } from './ChatContext';
 
 import firebase from '@react-native-firebase/app';
 import messaging from '@react-native-firebase/messaging';
@@ -36,10 +40,13 @@ async function requestNotificationPermissionAndroid() {
         title: 'Permiso para notificaciones',
         message: 'La app necesita permiso para mostrar notificaciones.',
         buttonPositive: 'Aceptar',
-      }
+      },
     );
     if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-      Alert.alert('Permiso denegado', 'No se concedió permiso para notificaciones.');
+      Alert.alert(
+        'Permiso denegado',
+        'No se concedió permiso para notificaciones.',
+      );
       return false;
     }
   }
@@ -70,33 +77,39 @@ export default function RootLayout() {
 }
 
 // 🔹 Componente interno que contiene los listeners
-function RootLayoutWithListeners({ colorScheme }: { colorScheme: 'dark' | 'light' }) {
-  const { currentOpenChatLinkKey, updateChatFromStorage, reloadChatsFromStorage   } = useChat();
+function RootLayoutWithListeners({
+  colorScheme,
+}: {
+  colorScheme: 'dark' | 'light';
+}) {
+  const {
+    currentOpenChatLinkKey,
+    updateChatFromStorage,
+    reloadChatsFromStorage,
+  } = useChat();
   const currentOpenChatLinkKeyRef = useRef<string | null>(null);
 
   const [deviceId, setDeviceId] = useState<string>('');
   const [fcmToken, setFcmToken] = useState<string | null>(null);
 
-
   useEffect(() => {
-  const loadPendingMessages = async () => {
-    const keys = await AsyncStorage.getAllKeys();
-    const chatKeys = keys.filter(k => k.startsWith('chat_'));
+    const loadPendingMessages = async () => {
+      const keys = await AsyncStorage.getAllKeys();
+      const chatKeys = keys.filter((k) => k.startsWith('chat_'));
 
-    for (let key of chatKeys) {
-      const stored = await AsyncStorage.getItem(key);
-      if (!stored) continue;
+      for (let key of chatKeys) {
+        const stored = await AsyncStorage.getItem(key);
+        if (!stored) continue;
 
-      const chatHistory = JSON.parse(stored);
+        const chatHistory = JSON.parse(stored);
 
-      // Actualiza el Context SIN duplicados
-      updateChatFromStorage(chatHistory);
-    }
-  };
+        // Actualiza el Context SIN duplicados
+        updateChatFromStorage(chatHistory);
+      }
+    };
 
-  loadPendingMessages();
-}, []);
-
+    loadPendingMessages();
+  }, []);
 
   // Mantener el valor del chat abierto actualizado
   useEffect(() => {
@@ -110,26 +123,28 @@ function RootLayoutWithListeners({ colorScheme }: { colorScheme: 'dark' | 'light
       console.log('✅ Firebase inicializado');
     }
     // Cuando la app se abre desde una notificación en background o cerrada
-  const unsubscribeOpened = messaging().onNotificationOpenedApp(async remoteMessage => {
-    console.log(' App abierta desde notificación:', remoteMessage);
-    await handleIncomingMessage(remoteMessage);
-  });
-
-  // Cuando la app se inicia desde un estado cerrado (killed)
-  messaging()
-    .getInitialNotification()
-    .then(async remoteMessage => {
-      if (remoteMessage) {
-        console.log(' App lanzada por una notificación:', remoteMessage);
+    const unsubscribeOpened = messaging().onNotificationOpenedApp(
+      async (remoteMessage) => {
+        console.log(' App abierta desde notificación:', remoteMessage);
         await handleIncomingMessage(remoteMessage);
-      }
+      },
+    );
 
-      reloadChatsFromStorage();
-    });
+    // Cuando la app se inicia desde un estado cerrado (killed)
+    messaging()
+      .getInitialNotification()
+      .then(async (remoteMessage) => {
+        if (remoteMessage) {
+          console.log(' App lanzada por una notificación:', remoteMessage);
+          await handleIncomingMessage(remoteMessage);
+        }
 
-     reloadChatsFromStorage();
+        reloadChatsFromStorage();
+      });
 
-  return unsubscribeOpened;
+    reloadChatsFromStorage();
+
+    return unsubscribeOpened;
   }, []);
 
   // Cargar o generar deviceId
@@ -162,67 +177,64 @@ function RootLayoutWithListeners({ colorScheme }: { colorScheme: 'dark' | 'light
       const token = await messaging().getToken();
       setFcmToken(token);
 
-     unsubscribeMessaging = messaging().onMessage(async remoteMessage => {
-  const mensajeData = remoteMessage.data?.mensaje;
-  if (!mensajeData) return;
+      unsubscribeMessaging = messaging().onMessage(async (remoteMessage) => {
+        const mensajeData = remoteMessage.data?.mensaje;
+        if (!mensajeData) return;
 
-  try {
-    const messageObj = JSON.parse(mensajeData);
+        try {
+          const messageObj = JSON.parse(mensajeData);
+          const contactName = await getContactNameByLinkKey(messageObj.linkKey);
 
-    // ✅ Solo procesar si el chat abierto es diferente
-    if (currentOpenChatLinkKeyRef.current !== messageObj.linkKey) {
-       const contactName = await getContactNameByLinkKey(messageObj.linkKey);
-       
-      // Mostrar notificación local
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: remoteMessage.data?.title,
-          body: remoteMessage.data?.body,
-          priority: Notifications.AndroidNotificationPriority.HIGH,
-        },
-        trigger: null,
+          const storageKey = `chat_${messageObj.linkKey}`;
+          const stored = await AsyncStorage.getItem(storageKey);
+          let chatHistory = stored ? JSON.parse(stored) : null;
+
+          if (!chatHistory) {
+            chatHistory = {
+              contact: {
+                id: messageObj.sender,
+                name: contactName,
+                key: messageObj.sender,
+                linkKey: messageObj.linkKey,
+              },
+              messages: [],
+              lastMessage: '',
+              lastTimestamp: 0,
+            };
+          }
+
+          const exists = chatHistory.messages.some(
+            (m) => m.id === messageObj.id,
+          );
+          if (exists) return;
+          chatHistory.messages.push(messageObj);
+          chatHistory.lastMessage = messageObj.text;
+          chatHistory.lastTimestamp = messageObj.timestamp;
+          chatHistory.unreadCount = (chatHistory.unreadCount ?? 0) + 1;
+
+          await AsyncStorage.setItem(storageKey, JSON.stringify(chatHistory));
+          // ✅ Solo procesar si el chat abierto es diferente
+          if (currentOpenChatLinkKeyRef.current !== messageObj.linkKey) {
+            // Mostrar notificación local
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: remoteMessage.data?.title,
+                body: remoteMessage.data?.body,
+                priority: Notifications.AndroidNotificationPriority.HIGH,
+              },
+              trigger: null,
+            });
+          } else {
+            console.log(
+              'Chat abierto, no se agrega notificación ni push al storage',
+            );
+          }
+        } catch (e) {
+          console.error('Error procesando mensaje:', e);
+        }
       });
-
-      const storageKey = `chat_${messageObj.linkKey}`;
-      const stored = await AsyncStorage.getItem(storageKey);
-      let chatHistory = stored ? JSON.parse(stored) : null;
-
-      if (!chatHistory) {
-        chatHistory = {
-          contact: {
-            id: messageObj.sender,
-            name: contactName,
-            key: messageObj.sender,
-            linkKey: messageObj.linkKey,
-          },
-          messages: [],
-          lastMessage: '',
-          lastTimestamp: 0,
-        };
-      }
- 
-      const exists = chatHistory.messages.some(m => m.id === messageObj.id);
-      if(exists) return;
-      chatHistory.messages.push(messageObj);
-      chatHistory.lastMessage = messageObj.text;
-      chatHistory.lastTimestamp = messageObj.timestamp;
-      chatHistory.unreadCount = (chatHistory.unreadCount ?? 0) + 1
-
-      await AsyncStorage.setItem(storageKey, JSON.stringify(chatHistory));
-    } else {
-      console.log('Chat abierto, no se agrega notificación ni push al storage');
-    }
-  } catch (e) {
-    console.error('Error procesando mensaje:', e);
-  }
-});
-
-
-
     };
 
-
-     
     setupFirebaseMessaging();
 
     return () => {
@@ -234,7 +246,10 @@ function RootLayoutWithListeners({ colorScheme }: { colorScheme: 'dark' | 'light
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        <Stack.Screen
+          name="modal"
+          options={{ presentation: 'modal', title: 'Modal' }}
+        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

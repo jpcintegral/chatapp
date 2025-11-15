@@ -1,5 +1,12 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -37,7 +44,7 @@ export default function ContactList() {
         (c: any) =>
           c.key === key ||
           c.linkKey === linkKey ||
-          c.name.toLowerCase() === name.toLowerCase()
+          c.name.toLowerCase() === name.toLowerCase(),
       );
 
       if (!exists) {
@@ -56,11 +63,16 @@ export default function ContactList() {
     useCallback(() => {
       loadContacts();
       addNewContact();
-    }, [params])
+    }, [params]),
   );
 
   // 🔹 Iniciar chat
-  const startChat = async (contact: { id: string; name: string; key: string; linkKey: string }) => {
+  const startChat = async (contact: {
+    id: string;
+    name: string;
+    key: string;
+    linkKey: string;
+  }) => {
     const storageKey = `chat_${contact.linkKey}`;
 
     try {
@@ -91,7 +103,12 @@ export default function ContactList() {
   };
 
   // 🔹 Eliminar contacto y todos los chats asociados
-  const deleteContact = (contact: { id: string; name: string; key: string; linkKey: string }) => {
+  const deleteContact = (contact: {
+    id: string;
+    name: string;
+    key: string;
+    linkKey: string;
+  }) => {
     Alert.alert(
       'Eliminar contacto',
       `¿Seguro que quieres eliminar a ${contact.name} y todos sus mensajes?`,
@@ -106,22 +123,26 @@ export default function ContactList() {
               const stored = await AsyncStorage.getItem('contacts');
               const parsed = stored ? JSON.parse(stored) : [];
               const updatedContacts = parsed.filter(
-                (c: any) => c.linkKey !== contact.linkKey
+                (c: any) => c.linkKey !== contact.linkKey,
               );
-              await AsyncStorage.setItem('contacts', JSON.stringify(updatedContacts));
+              await AsyncStorage.setItem(
+                'contacts',
+                JSON.stringify(updatedContacts),
+              );
               setContacts(updatedContacts);
 
               // Eliminar chats asociados
               const keys = await AsyncStorage.getAllKeys();
-              const chatKeysToRemove = keys.filter(k => k.startsWith('chat_') && k.includes(contact.linkKey));
+              const chatKeysToRemove = keys.filter(
+                (k) => k.startsWith('chat_') && k.includes(contact.linkKey),
+              );
               await AsyncStorage.multiRemove(chatKeysToRemove);
-
             } catch (error) {
               console.error('❌ Error eliminando contacto y chats:', error);
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -161,10 +182,34 @@ export default function ContactList() {
 }
 
 const styles = StyleSheet.create({
-  container: { paddingTop: 40, flex: 1, backgroundColor: '#fff', paddingVertical: 10 },
-  contactItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, justifyContent: 'space-between' },
-  iconContainer: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#248588', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  container: {
+    paddingTop: 40,
+    flex: 1,
+    backgroundColor: '#fff',
+    paddingVertical: 10,
+  },
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    justifyContent: 'space-between',
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#248588',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
   contactName: { fontSize: 18, color: '#333' },
   separator: { height: 1, backgroundColor: '#e5e5e5', marginLeft: 80 },
-  emptyText: { textAlign: 'center', color: '#999', fontSize: 16, marginTop: 50 },
+  emptyText: {
+    textAlign: 'center',
+    color: '#999',
+    fontSize: 16,
+    marginTop: 50,
+  },
 });

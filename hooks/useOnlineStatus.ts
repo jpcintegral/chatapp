@@ -1,8 +1,7 @@
-import  {  useState,useEffect,  } from 'react';
+import { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 
 const socket = io('https://chatback.devscolima.com');
-
 
 export function useOnlineStatus() {
   const [onlineUsers, setOnlineUsers] = useState<Record<string, boolean>>({});

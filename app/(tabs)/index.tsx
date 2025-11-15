@@ -11,7 +11,11 @@ import {
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import QRCode from 'react-native-qrcode-svg';
-import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
+import {
+  CameraView,
+  useCameraPermissions,
+  BarcodeScanningResult,
+} from 'expo-camera';
 import messaging from '@react-native-firebase/messaging';
 
 export default function HomeScreen() {
@@ -26,34 +30,32 @@ export default function HomeScreen() {
 
   const [permission, requestPermission] = useCameraPermissions();
 
-  
-useEffect(() => {
-  const checkPermission = async () => {
-    if (!permission) return;
-    if (!permission.granted) {
-      const response = await requestPermission();
-      if (response.granted) {
-        // 🔹 Fuerza una actualización del estado
-        setTimeout(() => {
-          console.log('Permiso de cámara otorgado');
-        }, 500);
+  useEffect(() => {
+    const checkPermission = async () => {
+      if (!permission) return;
+      if (!permission.granted) {
+        const response = await requestPermission();
+        if (response.granted) {
+          // 🔹 Fuerza una actualización del estado
+          setTimeout(() => {
+            console.log('Permiso de cámara otorgado');
+          }, 500);
+        }
       }
-    }
-  };
-  checkPermission();
-}, [requestPermission]);
-
+    };
+    checkPermission();
+  }, [requestPermission]);
 
   // 🔹 Función para registrar el linkKey con el token en el backend
   const registerContactToken = async (linkKey: string) => {
     try {
       const token = await messaging().getToken();
       const deviceId = await AsyncStorage.getItem('deviceId'); // tu deviceId local
-    
-      await fetch('https://chatback.devscolima.com/api/register-token', {
+
+      await fetch('http://192.168.1.66:3100/api/register-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: deviceId, token,linkKey }),
+        body: JSON.stringify({ userId: deviceId, token, linkKey }),
       });
       console.log('Contacto registrado con token:', token);
     } catch (error) {
@@ -63,7 +65,10 @@ useEffect(() => {
 
   const generateKey = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    return Array.from(
+      { length: 6 },
+      () => chars[Math.floor(Math.random() * chars.length)],
+    ).join('');
   };
 
   const handleAddContact = async () => {
@@ -78,7 +83,9 @@ useEffect(() => {
     const stored = await AsyncStorage.getItem('contacts');
     const parsed = stored ? JSON.parse(stored) : [];
 
-    const exists = parsed.some((c: any) => c.name.toLowerCase() === name.toLowerCase());
+    const exists = parsed.some(
+      (c: any) => c.name.toLowerCase() === name.toLowerCase(),
+    );
     if (exists) {
       Alert.alert('Aviso', 'Este contacto ya existe.');
       return;
@@ -105,7 +112,10 @@ useEffect(() => {
 
   const handleConfirmAddFromQR = async () => {
     if (!contactName.trim()) {
-      Alert.alert('Error', 'Debes ingresar un nombre para guardar el contacto.');
+      Alert.alert(
+        'Error',
+        'Debes ingresar un nombre para guardar el contacto.',
+      );
       return;
     }
 
@@ -158,7 +168,10 @@ useEffect(() => {
       />
 
       <View style={{ width: '100%', marginBottom: 10 }}>
-        <Button title="Agregar Contacto y Generar QR" onPress={handleAddContact} />
+        <Button
+          title="Agregar Contacto y Generar QR"
+          onPress={handleAddContact}
+        />
       </View>
 
       <View style={{ width: '100%', marginBottom: 10 }}>
@@ -167,9 +180,13 @@ useEffect(() => {
 
       <Modal visible={showQR} transparent animationType="slide">
         <View style={styles.modal}>
-          <Text style={{ marginBottom: 10 }}>Escanea este QR para vincular contacto</Text>
+          <Text style={{ marginBottom: 10 }}>
+            Escanea este QR para vincular contacto
+          </Text>
           <QRCode value={generatedKey || 'XXXXXX'} size={200} />
-          <Text style={{ marginTop: 10, fontSize: 16 }}>Clave: {generatedKey}</Text>
+          <Text style={{ marginTop: 10, fontSize: 16 }}>
+            Clave: {generatedKey}
+          </Text>
           <Button title="Cerrar" onPress={() => setShowQR(false)} />
         </View>
       </Modal>
@@ -187,7 +204,9 @@ useEffect(() => {
       <Modal visible={showAddFromQR} transparent animationType="slide">
         <View style={styles.modal}>
           <Text style={{ marginBottom: 10 }}>Se detectó un nuevo contacto</Text>
-          <Text style={{ marginBottom: 15 }}>Clave detectada: {scannedKey}</Text>
+          <Text style={{ marginBottom: 15 }}>
+            Clave detectada: {scannedKey}
+          </Text>
 
           <TextInput
             style={styles.input}

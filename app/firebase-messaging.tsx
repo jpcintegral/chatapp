@@ -3,26 +3,25 @@ import messaging from '@react-native-firebase/messaging';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 
- const getContactNameByLinkKey = async (linkKey: string): Promise<string> => {
-   try {
-     const storedContacts = await AsyncStorage.getItem('contacts');
-     const contacts = storedContacts ? JSON.parse(storedContacts) : [];
-     const contact = contacts.find((c: any) => c.linkKey === linkKey);
-     return contact ? contact.name : 'Contacto';
-   } catch (e) {
-     console.error('Error obteniendo nombre de contacto:', e);
-     return 'Contacto';
-   }
- };
+const getContactNameByLinkKey = async (linkKey: string): Promise<string> => {
+  try {
+    const storedContacts = await AsyncStorage.getItem('contacts');
+    const contacts = storedContacts ? JSON.parse(storedContacts) : [];
+    const contact = contacts.find((c: any) => c.linkKey === linkKey);
+    return contact ? contact.name : 'Contacto';
+  } catch (e) {
+    console.error('Error obteniendo nombre de contacto:', e);
+    return 'Contacto';
+  }
+};
 
-messaging().setBackgroundMessageHandler(async remoteMessage => {
+messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   console.log('📩 Mensaje recibido en background:', remoteMessage);
   const mensajeData = remoteMessage.data?.mensaje;
   if (!mensajeData) return;
 
   try {
-
-     // Opcional: mostrar notificación local
+    // Opcional: mostrar notificación local
     await Notifications.scheduleNotificationAsync({
       content: {
         title: remoteMessage.data?.title,
@@ -38,8 +37,6 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
     const stored = await AsyncStorage.getItem(storageKey);
     let chatHistory = stored ? JSON.parse(stored) : null;
 
-      
-
     if (!chatHistory) {
       chatHistory = {
         contact: {
@@ -54,28 +51,22 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
       };
     }
 
-
-   
-     const exists = chatHistory.messages.some(m => m.id === messageObj.id);
-      if(exists) return;
+    const exists = chatHistory.messages.some((m) => m.id === messageObj.id);
+    if (exists) return;
     chatHistory.messages.push(messageObj);
     chatHistory.lastMessage = messageObj.text;
     chatHistory.lastTimestamp = messageObj.timestamp;
-    chatHistory.unreadCount = (chatHistory.unreadCount ?? 0) + 1
+    chatHistory.unreadCount = (chatHistory.unreadCount ?? 0) + 1;
 
     await AsyncStorage.setItem(storageKey, JSON.stringify(chatHistory));
 
-  
-
     console.log(' Mensaje guardado en background', storageKey);
-
   } catch (e) {
     console.error(' Error guardando mensaje en background:', e);
   }
 });
 
-
-export  const handleIncomingMessage = async (remoteMessage: any) => {
+export const handleIncomingMessage = async (remoteMessage: any) => {
   try {
     const mensajeData = remoteMessage.data?.mensaje;
     if (!mensajeData) return;
@@ -100,9 +91,9 @@ export  const handleIncomingMessage = async (remoteMessage: any) => {
         lastTimestamp: 0,
       };
     }
- 
-     const exists = chatHistory.messages.some(m => m.id === messageObj.id);
-      if(exists) return;
+
+    const exists = chatHistory.messages.some((m) => m.id === messageObj.id);
+    if (exists) return;
     chatHistory.messages.push(messageObj);
     chatHistory.lastMessage = messageObj.text;
     chatHistory.lastTimestamp = messageObj.timestamp;
@@ -114,5 +105,3 @@ export  const handleIncomingMessage = async (remoteMessage: any) => {
     console.error('Error procesando mensaje tras abrir la notificación:', e);
   }
 };
-
-
