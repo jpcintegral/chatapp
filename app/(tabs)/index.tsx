@@ -19,8 +19,6 @@ import {
 import messaging from '@react-native-firebase/messaging';
 
 export default function HomeScreen() {
-  const router = useRouter();
-
   const [contactName, setContactName] = useState('');
   const [generatedKey, setGeneratedKey] = useState('');
   const [showQR, setShowQR] = useState(false);
@@ -52,7 +50,7 @@ export default function HomeScreen() {
       const token = await messaging().getToken();
       const deviceId = await AsyncStorage.getItem('deviceId'); // tu deviceId local
 
-      await fetch('http://192.168.1.66:3100/api/register-token', {
+      await fetch('https://chatback.devscolima.com/api/register-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: deviceId, token, linkKey }),
