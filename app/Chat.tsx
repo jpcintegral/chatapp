@@ -17,29 +17,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import CryptoJS from 'crypto-js';
 import { useChat } from './ChatContext';
-
-interface Message {
-  id: string;
-  text: string; // encrypted text
-  sender: string;
-  to?: string;
-  timestamp: number;
-}
-
-interface Contact {
-  id: string;
-  name: string;
-  key: string;
-  linkKey: string;
-}
-
-interface ChatHistory {
-  contact: Contact;
-  messages: Message[]; // stored encrypted
-  lastTimestamp: number;
-  lastMessage: string; // encrypted
-  unreadCount: number;
-}
+import { Message } from '@/interfaces/message.interface';
+import { ChatHistory } from '@/interfaces/chat.interface';
+import { Contact } from '@/interfaces/contact.interface';
 
 export default function Chat() {
   const { contactName, id, key, linkKey } = useLocalSearchParams<{
