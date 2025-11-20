@@ -198,6 +198,7 @@ export default function ChatList() {
   };
 
   // 🔹 Eliminar chat específico
+  // 🔹 Eliminar chat específico completamente
   const deleteChat = (chat: ChatHistory) => {
     Alert.alert(
       'Eliminar chat',
@@ -211,16 +212,30 @@ export default function ChatList() {
             try {
               const chatKey = `chat_${chat.contact.linkKey}`;
 
+              // 1️⃣ Eliminar del AsyncStorage
               await AsyncStorage.removeItem(chatKey);
-              const stored = await AsyncStorage.getItem(chatKey);
-              console.log('Chat eliminado de AsyncStorage:', stored);
 
-              // 🔹 Actualizamos el estado local
+              // 2️⃣ Si hay mensajes adicionales en otras claves (ej: por dispositivo)
+              // Puedes agregar un patrón que elimine todo lo que inicie con chat_ + linkKey
+              const keys = await AsyncStorage.getAllKeys();
+              console.log('🔑 Claves en AsyncStorage:', keys);
+              const relatedKeys = keys.filter((k) =>
+                k.startsWith(`chat_${chat.contact.linkKey}`),
+              );
+              for (const key of relatedKeys) {
+                await AsyncStorage.removeItem(key);
+              }
+
+              // 3️⃣ Limpiar estado local
               setChats((prev) =>
                 prev.filter((c) => c.contact.linkKey !== chat.contact.linkKey),
               );
+
+              console.log(
+                `Chat con chat_${chat.contact.linkKey} eliminado completamente`,
+              );
             } catch (error) {
-              console.error('Error eliminando chat:', error);
+              console.error('Error eliminando chat completamente:', error);
             }
           },
         },

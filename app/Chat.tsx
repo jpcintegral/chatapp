@@ -58,6 +58,7 @@ export default function Chat() {
   });
 
   // --- Hook que maneja la conexión socket, merge con servidor y recepcionar mensajes ---
+
   useChatSocket({
     contact,
     deviceId,
