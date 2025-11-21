@@ -120,6 +120,45 @@ export const useChatSocket = ({
       });
     };
 
+    // ---Escuchar mensajes eliminados ---
+    const onMessagesDeleted = async ({
+      messageIds,
+    }: {
+      messageIds: string[];
+    }) => {
+      if (!Array.isArray(messageIds) || messageIds.length === 0) return;
+      console.log('🗑️ Mensajes eliminados recibidos:', messageIds);
+      setMessages((prev: Message[]) => {
+        const filtered = prev.filter((m) => !messageIds.includes(m.id));
+
+        (async () => {
+          try {
+            await AsyncStorage.setItem(
+              storageKey,
+              JSON.stringify({
+                contact,
+                messages: filtered,
+                lastMessage: filtered[filtered.length - 1]?.text || '',
+                lastTimestamp: filtered[filtered.length - 1]?.timestamp || 0,
+                unreadCount: 0,
+              }),
+            );
+
+            updateChatFromStorage({
+              contact,
+              messages: filtered,
+              lastMessage: filtered[filtered.length - 1]?.text || '',
+              lastTimestamp: filtered[filtered.length - 1]?.timestamp || 0,
+            });
+          } catch (err) {
+            console.error('Error actualizando después de delete:', err);
+          }
+        })();
+
+        return filtered;
+      });
+    };
+
     // --- Registrar listeners ---
     socket.off('chatHistoryResponse', onChatHistoryResponse);
     socket.on('chatHistoryResponse', onChatHistoryResponse);
@@ -127,10 +166,14 @@ export const useChatSocket = ({
     socket.off('receiveMessage', onReceiveMessage);
     socket.on('receiveMessage', onReceiveMessage);
 
+    socket.off('messagesDeleted', onMessagesDeleted);
+    socket.on('messagesDeleted', onMessagesDeleted);
+
     // --- Cleanup ---
     return () => {
       socket.off('chatHistoryResponse', onChatHistoryResponse);
       socket.off('receiveMessage', onReceiveMessage);
+      socket.off('messagesDeleted', onMessagesDeleted);
     };
   }, [contact.linkKey, deviceId]);
 };

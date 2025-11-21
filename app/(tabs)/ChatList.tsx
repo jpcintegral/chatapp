@@ -212,6 +212,27 @@ export default function ChatList() {
             try {
               const chatKey = `chat_${chat.contact.linkKey}`;
 
+              // 1️⃣ Obtener mensajes locales antes de borrar
+              const raw = await AsyncStorage.getItem(chatKey);
+              let messageIds: string[] = [];
+
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed.messages)) {
+                  messageIds = parsed.messages.map((m: any) => m.id);
+                }
+              }
+
+              console.log('🗑️ Eliminando mensajes del chat:', messageIds);
+
+              // 2️⃣ Enviar al servidor para borrar de MongoDB
+              if (messageIds.length > 0) {
+                socket.emit('deleteMessages', {
+                  linkKey: chat.contact.linkKey,
+                  messageIds,
+                });
+              }
+
               // 1️⃣ Eliminar del AsyncStorage
               await AsyncStorage.removeItem(chatKey);
 

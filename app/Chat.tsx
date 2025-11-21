@@ -1,8 +1,13 @@
 import { socket } from '@/hooks/socket';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { useMessageActions } from '@/hooks/useMessageActions';
 import { useChat } from './ChatContext';
-import { useLocalSearchParams, useFocusEffect } from 'expo-router';
-import React, { useState, useRef, useCallback } from 'react';
+import {
+  useLocalSearchParams,
+  useFocusEffect,
+  useNavigation,
+} from 'expo-router';
+import React, { useState, useRef, useCallback, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +18,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  useColorScheme,
 } from 'react-native';
 import { useHeaderTap } from '@/hooks/useHeaderTap';
 import { useChatStorage } from '@/hooks/useChatStorage';
@@ -24,6 +30,7 @@ import { Contact } from '@/interfaces/contact.interface';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Chat() {
+  const navigation = useNavigation();
   const { contactName, id, key, linkKey } = useLocalSearchParams<{
     contactName: string;
     id: string;
@@ -45,8 +52,9 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const { setCurrentOpenChatLinkKey, updateChatFromStorage } = useChat();
   const [inputHeight, setInputHeight] = useState(40);
-
   const { isDecrypted, handleHeaderPress } = useHeaderTap();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   // --- Hook que carga/persiste/merge mensajes desde AsyncStorage ---
   useChatStorage({
@@ -67,6 +75,61 @@ export default function Chat() {
     setMessages,
     updateChatFromStorage,
   });
+
+  // --- Hook que maneja acciones sobre mensajes (eliminar, etc) ---
+  const {
+    selectedMessages,
+    isSelectionMode,
+    handleLongPress,
+    toggleSelect,
+    deleteSelectedMessages,
+    clearSelection,
+  } = useMessageActions({
+    messages,
+    setMessages,
+    storageKey,
+    contact,
+    updateChatFromStorage,
+  });
+
+  // Cambiar header dependiendo del modo selección
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: '',
+      headerRight: () => null,
+      headerLeft: () => null,
+
+      headerTitle: () => (
+        <TouchableOpacity onPress={handleHeaderPress}>
+          <View style={styles.headerRow}>
+            {/* AVATAR */}
+            <View style={styles.avatar}>
+              <Text
+                style={[styles.avatarText, { color: isDark ? '#fff' : '#000' }]}
+              >
+                {contact.name?.charAt(0)?.toUpperCase()}
+              </Text>
+            </View>
+
+            {/* TEXTO */}
+            <View style={styles.headerTextContainer}>
+              <Text
+                style={[styles.headerName, { color: isDark ? '#fff' : '#000' }]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {isDecrypted ? contact.name : encryptMessage(contact.name)}
+              </Text>
+
+              <Text style={styles.headerStatus}>
+                {isOnline ? 'En línea' : 'Desconectado'}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      ),
+    });
+  }, [isSelectionMode, selectedMessages.length, isDecrypted, isOnline]);
 
   // --- deviceId persistente ---
   React.useEffect(() => {
@@ -155,14 +218,23 @@ export default function Chat() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <TouchableOpacity onPress={handleHeaderPress}>
-        <Text style={styles.header}>
-          {isDecrypted ? contact.name : encryptMessage(contact.name)}
-        </Text>
-        <Text style={{ textAlign: 'center', color: '#666', marginBottom: 6 }}>
-          {isOnline ? 'En línea' : 'Desconectado'}
-        </Text>
-      </TouchableOpacity>
+      {isSelectionMode ? (
+        <View style={styles.selectionHeader}>
+          <Text style={styles.selectionText}>
+            {selectedMessages.length} seleccionados
+          </Text>
+
+          <TouchableOpacity onPress={deleteSelectedMessages}>
+            <Text style={styles.selectionDelete}>Eliminar</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={clearSelection}>
+            <Text style={styles.selectionCancel}>Cancelar</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <></>
+      )}
 
       <FlatList
         ref={flatListRef}
@@ -171,31 +243,44 @@ export default function Chat() {
         renderItem={({ item }) => {
           const isMine = item.sender === deviceId;
           return (
-            <View
-              style={[
-                styles.messageWrapper,
-                isMine ? styles.myMessageWrapper : styles.contactMessageWrapper,
-              ]}
+            <TouchableOpacity
+              onLongPress={() => handleLongPress(item)}
+              onPress={() => {
+                if (selectedMessages.length > 0) toggleSelect(item);
+              }}
             >
               <View
-                style={
+                style={[
+                  styles.messageWrapper,
                   isMine
-                    ? styles.myMessageContainer
-                    : styles.contactMessageContainer
-                }
+                    ? styles.myMessageWrapper
+                    : styles.contactMessageWrapper,
+                  selectedMessages.some((m) => m.id === item.id) && {
+                    backgroundColor: 'rgba(0,0,255,0.2)',
+                    borderRadius: 10,
+                  },
+                ]}
               >
-                <Text
+                <View
                   style={
-                    isMine ? styles.myMessageText : styles.contactMessageText
+                    isMine
+                      ? styles.myMessageContainer
+                      : styles.contactMessageContainer
                   }
                 >
-                  {displayText(item)}
-                </Text>
-                <Text style={styles.timestamp}>
-                  {formatTime(item.timestamp)}
-                </Text>
+                  <Text
+                    style={
+                      isMine ? styles.myMessageText : styles.contactMessageText
+                    }
+                  >
+                    {displayText(item)}
+                  </Text>
+                  <Text style={styles.timestamp}>
+                    {formatTime(item.timestamp)}
+                  </Text>
+                </View>
               </View>
-            </View>
+            </TouchableOpacity>
           );
         }}
         contentContainerStyle={{ paddingVertical: 10, paddingBottom: 60 }}
@@ -289,4 +374,65 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   sendText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+
+  selectionHeader: {
+    padding: 12,
+    backgroundColor: '#075E54',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  selectionText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  selectionDelete: {
+    color: '#FFCDD2',
+    fontSize: 16,
+    marginRight: 15,
+  },
+  selectionCancel: {
+    color: '#fff',
+    fontSize: 16,
+  },
+
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  avatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+
+  headerTextContainer: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+    maxWidth: 180, // evita que rompa el layout
+  },
+
+  headerName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#222',
+  },
+
+  headerStatus: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: -2,
+  },
 });
