@@ -138,6 +138,7 @@ export default function Chat() {
   }, []);
 
   useEffect(() => {
+    cleanOldMessages();
     setCurrentOpenChatLinkKey(chatContact.linkKey);
     return () => setCurrentOpenChatLinkKey('');
   }, [chatContact.linkKey]);
@@ -157,6 +158,40 @@ export default function Chat() {
     contact: chatContact,
     updateChatFromStorage,
   });
+
+  const cleanOldMessages = async () => {
+    try {
+      const ONE_HOUR = 240 * 60 * 1000;
+      const now = Date.now();
+
+      const filtered = messages.filter((m) => now - m.timestamp <= ONE_HOUR);
+
+      if (filtered.length !== messages.length) {
+        console.log('🧹 Eliminando mensajes antiguos...');
+        setMessages(filtered);
+
+        await AsyncStorage.setItem(
+          storageKey,
+          JSON.stringify({
+            contact: chatContact,
+            messages: filtered,
+            lastMessage: filtered[filtered.length - 1]?.text || '',
+            lastTimestamp: filtered[filtered.length - 1]?.timestamp || 0,
+            unreadCount: 0,
+          }),
+        );
+
+        updateChatFromStorage({
+          contact: chatContact,
+          messages: filtered,
+          lastMessage: filtered[filtered.length - 1]?.text || '',
+          lastTimestamp: filtered[filtered.length - 1]?.timestamp || 0,
+        });
+      }
+    } catch (err) {
+      console.error('❌ Error limpiando mensajes:', err);
+    }
+  };
 
   // --- Header dinámico ---
   useLayoutEffect(() => {
