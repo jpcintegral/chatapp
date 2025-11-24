@@ -1,21 +1,20 @@
 import { useState, useEffect } from 'react';
-import io from 'socket.io-client';
 import { socket } from '@/hooks/socket';
-export function useOnlineStatus(contactId: string) {
+
+export function useOnlineStatus() {
   const [onlineUsers, setOnlineUsers] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    socket.on('userStatus', ({ linkKey, status }) => {
-      setOnlineUsers((prev) => ({
-        ...prev,
-        [linkKey]: status === 'online',
-      }));
-    });
+    const handler = (users: Record<string, boolean>) => {
+      setOnlineUsers(users);
+    };
+
+    socket.on('userStatus', handler);
 
     return () => {
-      socket.off('userStatus');
+      socket.off('userStatus', handler);
     };
   }, []);
 
-  return { onlineUsers, socket };
+  return { onlineUsers };
 }

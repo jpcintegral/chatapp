@@ -3,4 +3,5 @@ export interface Contact {
   name: string;
   key: string;
   linkKey: string;
+  deviceId: string;
 }

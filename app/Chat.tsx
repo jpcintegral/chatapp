@@ -1,13 +1,9 @@
 import { socket } from '@/hooks/socket';
-import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { useChatPresence } from '@/hooks/useChatPresence';
 import { useMessageActions } from '@/hooks/useMessageActions';
 import { useChat } from './ChatContext';
-import {
-  useLocalSearchParams,
-  useFocusEffect,
-  useNavigation,
-} from 'expo-router';
-import React, { useState, useRef, useCallback, useLayoutEffect } from 'react';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -31,52 +27,122 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Chat() {
   const navigation = useNavigation();
-  const { contactName, id, key, linkKey } = useLocalSearchParams<{
+  const { contactName, id, key, linkKey, deviceId } = useLocalSearchParams<{
     contactName: string;
     id: string;
     key: string;
     linkKey: string;
+    deviceId: string;
   }>();
 
-  const contact: Contact = {
+  // --- Contacto inicial ---
+  const initialContact: Contact = {
     id: id || '',
     name: contactName || 'Contacto',
     key: key || id || '',
     linkKey: linkKey || key || id || '',
+    deviceId: deviceId || '', // puede venir vacío
   };
 
-  const storageKey = `chat_${contact.linkKey}`;
-  const [deviceId, setDeviceId] = useState<string>('');
-  const { isOnline } = useOnlineStatus(contact.id);
+  // --- Contacto reactivo (este sí se actualiza cuando llega el deviceId real) ---
+  const [chatContact, setChatContact] = useState<Contact>(initialContact);
+
+  const storageKey = `chat_${chatContact.linkKey}`;
+  const [myDeviceId, setMyDeviceId] = useState<string>('');
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const { setCurrentOpenChatLinkKey, updateChatFromStorage } = useChat();
-  const [inputHeight, setInputHeight] = useState(40);
+
   const { isDecrypted, handleHeaderPress } = useHeaderTap();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  // --- Hook que carga/persiste/merge mensajes desde AsyncStorage ---
+  // --- Obtener deviceId del contacto cuando entras al chat ---
+  useEffect(() => {
+    if (!chatContact?.linkKey || !myDeviceId) return;
+
+    socket.emit('requestContactDeviceId', {
+      linkKey: chatContact.linkKey,
+      myDeviceId,
+    });
+  }, [chatContact.linkKey, myDeviceId]);
+
+  // --- Listener para recibir deviceId del contacto ---
+  useEffect(() => {
+    const onContactDeviceId = (data: { deviceId: string; linkKey: string }) => {
+      console.log('📡 onContactDeviceId data recibido:', data);
+
+      if (!data || data.linkKey !== chatContact.linkKey) return;
+
+      console.log('📡 Device ID del contacto actualizado:', data.deviceId);
+
+      const updated = {
+        ...chatContact,
+        deviceId: data.deviceId,
+      };
+
+      setChatContact(updated);
+
+      updateChatFromStorage({
+        contact: updated,
+        messages: [],
+        lastMessage: '',
+        lastTimestamp: 0,
+      });
+    };
+
+    socket.on('contactDeviceId', onContactDeviceId);
+
+    return () => socket.off('contactDeviceId', onContactDeviceId);
+  }, [chatContact]);
+
+  // --- Presencia online ---
+  const { activeUsers } = useChatPresence(chatContact.linkKey, myDeviceId);
+  const isOnline = activeUsers.includes(chatContact.deviceId);
+
+  // --- Hook que maneja almacenamiento local ---
   useChatStorage({
     storageKey,
-    contact,
+    contact: chatContact,
     messages,
     setMessages,
     updateChatFromStorage,
   });
 
-  // --- Hook que maneja la conexión socket, merge con servidor y recepcionar mensajes ---
-
+  // --- Hook que maneja mensajes por socket ---
   useChatSocket({
-    contact,
-    deviceId,
+    contact: chatContact,
+    myDeviceId,
     storageKey,
     messages,
     setMessages,
     updateChatFromStorage,
+    setChatContact,
   });
 
-  // --- Hook que maneja acciones sobre mensajes (eliminar, etc) ---
+  // --- deviceId local persistente ---
+  useEffect(() => {
+    (async () => {
+      try {
+        let id = await AsyncStorage.getItem('deviceId');
+        if (!id) {
+          id = 'device_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+          await AsyncStorage.setItem('deviceId', id);
+        }
+        setMyDeviceId(id);
+      } catch (err) {
+        console.error('Error cargando deviceId:', err);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    setCurrentOpenChatLinkKey(chatContact.linkKey);
+    return () => setCurrentOpenChatLinkKey('');
+  }, [chatContact.linkKey]);
+
+  // --- Manejo de modos de selección ---
   const {
     selectedMessages,
     isSelectionMode,
@@ -88,11 +154,11 @@ export default function Chat() {
     messages,
     setMessages,
     storageKey,
-    contact,
+    contact: chatContact,
     updateChatFromStorage,
   });
 
-  // Cambiar header dependiendo del modo selección
+  // --- Header dinámico ---
   useLayoutEffect(() => {
     navigation.setOptions({
       title: '',
@@ -102,23 +168,23 @@ export default function Chat() {
       headerTitle: () => (
         <TouchableOpacity onPress={handleHeaderPress}>
           <View style={styles.headerRow}>
-            {/* AVATAR */}
             <View style={styles.avatar}>
               <Text
                 style={[styles.avatarText, { color: isDark ? '#fff' : '#000' }]}
               >
-                {contact.name?.charAt(0)?.toUpperCase()}
+                {chatContact.name?.charAt(0)?.toUpperCase()}
               </Text>
             </View>
 
-            {/* TEXTO */}
             <View style={styles.headerTextContainer}>
               <Text
                 style={[styles.headerName, { color: isDark ? '#fff' : '#000' }]}
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
-                {isDecrypted ? contact.name : encryptMessage(contact.name)}
+                {isDecrypted
+                  ? chatContact.name
+                  : encryptMessage(chatContact.name)}
               </Text>
 
               <Text style={styles.headerStatus}>
@@ -129,31 +195,9 @@ export default function Chat() {
         </TouchableOpacity>
       ),
     });
-  }, [isSelectionMode, selectedMessages.length, isDecrypted, isOnline]);
+  }, [chatContact.name, isOnline, isDecrypted, isSelectionMode]);
 
-  // --- deviceId persistente ---
-  React.useEffect(() => {
-    (async () => {
-      try {
-        let id = await AsyncStorage.getItem('deviceId');
-        if (!id) {
-          id = 'device_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
-          await AsyncStorage.setItem('deviceId', id);
-        }
-        setDeviceId(id);
-      } catch (err) {
-        console.error('Error cargando deviceId:', err);
-      }
-    })();
-  }, []);
-
-  // --- actualiza chat abierto en contexto ---
-  React.useEffect(() => {
-    setCurrentOpenChatLinkKey(contact.linkKey);
-    return () => setCurrentOpenChatLinkKey('');
-  }, [contact.linkKey]);
-
-  // --- enviar mensaje ---
+  // --- Enviar mensaje ---
   const sendMessage = async () => {
     if (!input.trim()) return;
 
@@ -166,52 +210,55 @@ export default function Chat() {
     const msg: Message = {
       id: 'msg_' + Date.now(),
       text: encrypted,
-      sender: deviceId,
-      to: contact.id,
+      sender: myDeviceId,
+      to: chatContact.id,
       timestamp: Date.now(),
     };
 
     setInput('');
     setMessages((prev) => [...prev, msg]);
 
-    // persistir local
     const raw = await AsyncStorage.getItem(storageKey);
     const stored = raw ? JSON.parse(raw).messages || [] : [];
     stored.push(msg);
+
     await AsyncStorage.setItem(
       storageKey,
       JSON.stringify({
-        contact,
+        contact: chatContact,
         messages: stored,
         lastMessage: msg.text,
         lastTimestamp: msg.timestamp,
         unreadCount: 0,
       }),
     );
+
     updateChatFromStorage({
-      contact,
+      contact: chatContact,
       messages: [msg],
       lastMessage: msg.text,
       lastTimestamp: msg.timestamp,
     });
 
     socket.emit('sendMessage', {
-      linkKey: contact.linkKey,
+      linkKey: chatContact.linkKey,
       message: msg,
-      sender: deviceId,
-      to: contact.id,
+      sender: myDeviceId,
+      to: chatContact.id,
     });
   };
 
   const displayText = (m: Message) =>
     isDecrypted ? decryptMessage(m.text) : m.text;
+
   const flatListRef = useRef<FlatList>(null);
-  // scroll automático al final cuando cambian los mensajes
-  React.useEffect(() => {
+
+  useEffect(() => {
     if (messages.length && flatListRef.current) {
       flatListRef.current.scrollToEnd({ animated: true });
     }
   }, [messages]);
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -232,22 +279,19 @@ export default function Chat() {
             <Text style={styles.selectionCancel}>Cancelar</Text>
           </TouchableOpacity>
         </View>
-      ) : (
-        <></>
-      )}
+      ) : null}
 
       <FlatList
         ref={flatListRef}
         data={messages}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {
-          const isMine = item.sender === deviceId;
+          const isMine = item.sender === myDeviceId;
+
           return (
             <TouchableOpacity
               onLongPress={() => handleLongPress(item)}
-              onPress={() => {
-                if (selectedMessages.length > 0) toggleSelect(item);
-              }}
+              onPress={() => selectedMessages.length > 0 && toggleSelect(item)}
             >
               <View
                 style={[
@@ -291,10 +335,7 @@ export default function Chat() {
           value={input}
           onChangeText={setInput}
           placeholder="Escribe un mensaje..."
-          style={[styles.input, { height: Math.min(120, inputHeight) }]}
-          onContentSizeChange={(e) =>
-            setInputHeight(e.nativeEvent.contentSize.height)
-          }
+          style={styles.input}
           multiline
         />
         <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
@@ -307,16 +348,25 @@ export default function Chat() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#e5ddd5', padding: 10 },
-  header: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 4,
-    color: '#333',
+
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
+  avatarText: { fontSize: 18, fontWeight: 'bold' },
+  headerTextContainer: { flexDirection: 'column', maxWidth: 180 },
+  headerName: { fontSize: 16, fontWeight: 'bold' },
+  headerStatus: { fontSize: 12, color: '#666' },
+
   messageWrapper: { marginVertical: 4, maxWidth: '80%', paddingHorizontal: 5 },
   myMessageWrapper: { alignSelf: 'flex-end' },
   contactMessageWrapper: { alignSelf: 'flex-start' },
+
   myMessageContainer: {
     backgroundColor: '#DCF8C6',
     borderRadius: 15,
@@ -335,43 +385,29 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     marginTop: 4,
   },
+
   inputContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 10,
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderColor: '#ddd',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
   },
   input: {
     flex: 1,
     backgroundColor: '#f1f1f1',
     borderRadius: 25,
     paddingHorizontal: 16,
-    paddingVertical: Platform.OS === 'ios' ? 12 : 8,
     fontSize: 16,
-    color: '#333',
-    maxHeight: 120,
   },
   sendButton: {
     backgroundColor: '#34B7F1',
     borderRadius: 25,
     paddingHorizontal: 18,
-    paddingVertical: 10,
-    marginLeft: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
+    marginLeft: 8,
   },
   sendText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 
@@ -380,59 +416,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#075E54',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
   },
-  selectionText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  selectionDelete: {
-    color: '#FFCDD2',
-    fontSize: 16,
-    marginRight: 15,
-  },
-  selectionCancel: {
-    color: '#fff',
-    fontSize: 16,
-  },
-
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-
-  avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  avatarText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-
-  headerTextContainer: {
-    flexDirection: 'column',
-    justifyContent: 'center',
-    maxWidth: 180, // evita que rompa el layout
-  },
-
-  headerName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#222',
-  },
-
-  headerStatus: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: -2,
-  },
+  selectionText: { color: '#fff', fontSize: 16 },
+  selectionDelete: { color: '#FFCDD2' },
+  selectionCancel: { color: '#fff' },
 });

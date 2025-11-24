@@ -6,13 +6,15 @@ import { Message } from '@/interfaces/message.interface';
 
 export const useChatSocket = ({
   contact,
-  deviceId,
+  myDeviceId,
   storageKey,
   setMessages,
   updateChatFromStorage,
+  setChatContact,
 }: any) => {
   useEffect(() => {
-    if (!deviceId || !contact.linkKey) return;
+    //console.log('🔌 useChatSocket iniciado para:', myDeviceId);
+    if (!myDeviceId || !contact.linkKey) return;
 
     // --- Función para unirse al chat y solicitar historial ---
     const joinAndRequestHistory = async () => {
@@ -23,11 +25,15 @@ export const useChatSocket = ({
           console.warn('socket.connect failed', e);
         }
       }
-
+      socket.emit('joinUser', contact.id);
       socket.emit('joinChat', contact.linkKey);
       socket.emit('requestChatHistory', {
         linkKey: contact.linkKey,
-        userId: deviceId,
+        userId: myDeviceId,
+      });
+      socket.emit('requestContactDeviceId', {
+        linkKey: contact.linkKey,
+        myDeviceId: myDeviceId,
       });
     };
 
@@ -39,11 +45,7 @@ export const useChatSocket = ({
       messages: serverMessages,
     }: any) => {
       if (lk !== contact.linkKey) return;
-      /*console.log('📨 Historial contact.linkKey:', contact.linkKey);
-      console.log(
-        '📨 Historial recibido del servidor:',
-        JSON.stringify(serverMessages, null, 2),
-      );*/
+
       try {
         const raw = await AsyncStorage.getItem(storageKey);
         const local: Message[] = raw ? JSON.parse(raw).messages || [] : [];
@@ -159,6 +161,26 @@ export const useChatSocket = ({
       });
     };
 
+    // --- Manejo del deviceId del contacto ---
+    const onContactDeviceId = ({ deviceId, linkKey }) => {
+      if (linkKey !== contact.linkKey) return;
+
+      console.log('📡 Device ID REAL del contacto recibido:', deviceId);
+
+      const updated = { ...contact, deviceId };
+
+      // Actualizar estado local del Chat
+      setChatContact(updated);
+
+      // Actualizar storage / context
+      updateChatFromStorage({
+        contact: updated,
+        messages: [],
+        lastMessage: '',
+        lastTimestamp: 0,
+      });
+    };
+
     // --- Registrar listeners ---
     socket.off('chatHistoryResponse', onChatHistoryResponse);
     socket.on('chatHistoryResponse', onChatHistoryResponse);
@@ -169,11 +191,16 @@ export const useChatSocket = ({
     socket.off('messagesDeleted', onMessagesDeleted);
     socket.on('messagesDeleted', onMessagesDeleted);
 
+    //--recuperar deviceId del contacto ---
+    socket.off('contactDeviceId', onContactDeviceId);
+    socket.on('contactDeviceId', onContactDeviceId);
+
     // --- Cleanup ---
     return () => {
       socket.off('chatHistoryResponse', onChatHistoryResponse);
       socket.off('receiveMessage', onReceiveMessage);
       socket.off('messagesDeleted', onMessagesDeleted);
+      socket.off('contactDeviceId', onContactDeviceId);
     };
-  }, [contact.linkKey, deviceId]);
+  }, [contact.linkKey, myDeviceId]);
 };
