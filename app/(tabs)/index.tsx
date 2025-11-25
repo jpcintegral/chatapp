@@ -90,6 +90,7 @@ export default function HomeScreen() {
     }
 
     const newContact = { id: key, key, name, linkKey: key };
+    console.log('Nuevo contacto a agregar:', JSON.stringify(newContact));
     const updated = [...parsed, newContact];
     await AsyncStorage.setItem('contacts', JSON.stringify(updated));
 
@@ -133,6 +134,7 @@ export default function HomeScreen() {
       name: contactName.trim(),
       linkKey: scannedKey,
     };
+    console.log('Nuevo contacto a agregar:', JSON.stringify(newContact));
     const updated = [...parsed, newContact];
     await AsyncStorage.setItem('contacts', JSON.stringify(updated));
 

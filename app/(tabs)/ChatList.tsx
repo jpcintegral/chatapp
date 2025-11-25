@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { formatTime } from '@/utils/time';
 
 // 🔹 Interfaces compartidas con Chat
 interface Message {
@@ -53,8 +54,8 @@ export default function ChatList() {
     (async () => {
       const deviceId = await AsyncStorage.getItem('deviceId');
       if (deviceId) {
-        console.log('🔗 Uniendo a sala (joinChat):', deviceId);
-        socket.emit('joinChat', deviceId);
+        console.log('🔗 Uniendo a sala (joinUser):', deviceId);
+        socket.emit('joinUser', deviceId);
       } else {
         console.warn('⚠️ No se encontró deviceId en AsyncStorage');
       }
@@ -87,62 +88,9 @@ export default function ChatList() {
     };
 
     socket.on('chatListHistoryResponse', handleHistory);
-
-    // 🔹 3) Escuchar actualizaciones en vivo
-    const handleUpdate = async ({
-      linkKey,
-      lastMessage,
-      timestamp,
-      sender,
-    }) => {
-      setChats((prevChats) => {
-        const exists = prevChats.find((c) => c.contact.linkKey === linkKey);
-
-        if (!exists) {
-          return [
-            {
-              contact: { id: sender, name: 'Nuevo contacto', key: '', linkKey },
-              messages: [],
-              lastMessage,
-              lastTimestamp: timestamp,
-              unreadCount: 1,
-            },
-            ...prevChats,
-          ];
-        }
-
-        const updated = prevChats.map((chat) =>
-          chat.contact.linkKey === linkKey
-            ? {
-                ...chat,
-                lastMessage,
-                lastTimestamp: timestamp,
-                unreadCount: chat.unreadCount + 1,
-              }
-            : chat,
-        );
-
-        updated.sort((a, b) => b.lastTimestamp - a.lastTimestamp);
-        return updated;
-      });
-
-      // Guardar cambio en AsyncStorage
-      const stored = await AsyncStorage.getItem(`chat_${linkKey}`);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        parsed.lastMessage = lastMessage;
-        parsed.lastTimestamp = timestamp;
-
-        await AsyncStorage.setItem(`chat_${linkKey}`, JSON.stringify(parsed));
-      }
-    };
-
-    socket.on('chatListUpdate', handleUpdate);
-
     // 🔹 Cleanup para evitar listeners duplicados
     return () => {
       socket.off('chatListHistoryResponse', handleHistory);
-      socket.off('chatListUpdate', handleUpdate);
     };
   }, []);
 
@@ -196,6 +144,61 @@ export default function ChatList() {
       console.error('Error cargando chats:', error);
     }
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      const handleUpdate = async ({
+        linkKey,
+        lastMessage,
+        timestamp,
+        sender,
+      }) => {
+        console.log('📩 Mensaje recibido en tiempo real para ChatList');
+
+        setChats((prevChats) => {
+          const exists = prevChats.find((c) => c.contact.linkKey === linkKey);
+
+          if (!exists) {
+            return [
+              {
+                contact: {
+                  id: sender,
+                  name: 'Nuevo contacto',
+                  key: '',
+                  linkKey,
+                },
+                messages: [],
+                lastMessage,
+                lastTimestamp: timestamp,
+                unreadCount: 1,
+              },
+              ...prevChats,
+            ];
+          }
+
+          const updated = prevChats.map((chat) =>
+            chat.contact.linkKey === linkKey
+              ? {
+                  ...chat,
+                  lastMessage,
+                  lastTimestamp: timestamp,
+                  unreadCount: chat.unreadCount + 1,
+                }
+              : chat,
+          );
+
+          updated.sort((a, b) => b.lastTimestamp - a.lastTimestamp);
+          return updated;
+        });
+      };
+
+      socket.on('chatListUpdate', handleUpdate);
+
+      return () => {
+        socket.off('chatListUpdate', handleUpdate);
+      };
+    }, []),
+  );
 
   // 🔹 Eliminar chat específico
   // 🔹 Eliminar chat específico completamente
@@ -271,6 +274,20 @@ export default function ChatList() {
         keyExtractor={(item) => `${item.contact.key}_${item.contact.id}`}
         renderItem={({ item }) => (
           <View style={styles.chatItem}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="person" size={26} color="#fff" />
+              {/*<View
+                  style={{
+                    position: 'absolute',
+                    bottom: 4,
+                    right: 4,
+                    width: 10,
+                    height: 10,
+                    borderRadius: 5,
+                    backgroundColor: onlineUsers[item.contact.linkKey] ? '#00C853' : '#9E9E9E',
+                  }}
+                /> */}
+            </View>
             <TouchableOpacity
               style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
               onPress={() =>
@@ -285,26 +302,17 @@ export default function ChatList() {
                 })
               }
             >
-              <View style={styles.iconContainer}>
-                <Ionicons name="person" size={26} color="#fff" />
-                {/*<View
-                  style={{
-                    position: 'absolute',
-                    bottom: 4,
-                    right: 4,
-                    width: 10,
-                    height: 10,
-                    borderRadius: 5,
-                    backgroundColor: onlineUsers[item.contact.linkKey] ? '#00C853' : '#9E9E9E',
-                  }}
-                /> */}
-              </View>
               <View style={styles.textContainer}>
                 <Text style={styles.contactName}>{item.contact.name}</Text>
+
                 <Text style={styles.lastMessage} numberOfLines={1}>
                   {item.lastMessage}
                 </Text>
+                <Text style={styles.timeRight}>
+                  {formatTime(item.lastTimestamp)}
+                </Text>
               </View>
+
               {item.unreadCount > 0 && (
                 <View style={styles.unreadBadge}>
                   <Text style={styles.unreadText}>{item.unreadCount}</Text>
@@ -375,5 +383,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  timeText: {
+    fontSize: 12,
+    color: '#777',
+    marginLeft: 8,
+  },
+  timeRight: {
+    fontSize: 12,
+    color: '#777',
+    marginLeft: 8,
+    width: 60,
+    textAlign: 'left',
   },
 });
