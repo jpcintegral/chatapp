@@ -15,6 +15,8 @@ import {
   Platform,
   Alert,
   useColorScheme,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 import { useHeaderTap } from '@/hooks/useHeaderTap';
 import { useChatStorage } from '@/hooks/useChatStorage';
@@ -24,6 +26,7 @@ import { formatTime } from '@/utils/time';
 import { Message } from '@/interfaces/message.interface';
 import { Contact } from '@/interfaces/contact.interface';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function Chat() {
   const navigation = useNavigation();
@@ -57,6 +60,7 @@ export default function Chat() {
   const { isDecrypted, handleHeaderPress } = useHeaderTap();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const [offset, setOffset] = useState(0);
 
   // --- Obtener deviceId del contacto cuando entras al chat ---
   useEffect(() => {
@@ -96,6 +100,21 @@ export default function Chat() {
 
     return () => socket.off('contactDeviceId', onContactDeviceId);
   }, [chatContact]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      setOffset(90); // offset cuando el teclado está visible
+    });
+
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setOffset(0); // offset cuando el teclado NO está visible
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // --- Presencia online ---
   const { activeUsers } = useChatPresence(chatContact.linkKey, myDeviceId);
@@ -295,89 +314,121 @@ export default function Chat() {
   }, [messages]);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
-      {isSelectionMode ? (
-        <View style={styles.selectionHeader}>
-          <Text style={styles.selectionText}>
-            {selectedMessages.length} seleccionados
-          </Text>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={offset}
+        >
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: isDark ? '#dad8d8ff' : '#e5ddd5',
+            }}
+          >
+            {/* HEADER DE SELECCIÓN */}
+            {isSelectionMode ? (
+              <View style={styles.selectionHeader}>
+                <Text style={styles.selectionText}>
+                  {selectedMessages.length} seleccionados
+                </Text>
 
-          <TouchableOpacity onPress={deleteSelectedMessages}>
-            <Text style={styles.selectionDelete}>Eliminar</Text>
-          </TouchableOpacity>
+                <TouchableOpacity onPress={deleteSelectedMessages}>
+                  <Text style={styles.selectionDelete}>Eliminar</Text>
+                </TouchableOpacity>
 
-          <TouchableOpacity onPress={clearSelection}>
-            <Text style={styles.selectionCancel}>Cancelar</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
+                <TouchableOpacity onPress={clearSelection}>
+                  <Text style={styles.selectionCancel}>Cancelar</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
 
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => {
-          const isMine = item.sender === myDeviceId;
+            {/* LISTA DE MENSAJES */}
+            <FlatList
+              ref={flatListRef}
+              data={messages}
+              keyExtractor={(item) => item.id}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              onContentSizeChange={() =>
+                flatListRef.current?.scrollToEnd({ animated: true })
+              }
+              onLayout={() =>
+                flatListRef.current?.scrollToEnd({ animated: false })
+              }
+              contentContainerStyle={{
+                paddingVertical: 10,
+                paddingBottom: 100,
+              }}
+              renderItem={({ item }) => {
+                const isMine = item.sender === myDeviceId;
 
-          return (
-            <TouchableOpacity
-              onLongPress={() => handleLongPress(item)}
-              onPress={() => selectedMessages.length > 0 && toggleSelect(item)}
-            >
-              <View
-                style={[
-                  styles.messageWrapper,
-                  isMine
-                    ? styles.myMessageWrapper
-                    : styles.contactMessageWrapper,
-                  selectedMessages.some((m) => m.id === item.id) && {
-                    backgroundColor: 'rgba(0,0,255,0.2)',
-                    borderRadius: 10,
-                  },
-                ]}
-              >
-                <View
-                  style={
-                    isMine
-                      ? styles.myMessageContainer
-                      : styles.contactMessageContainer
-                  }
-                >
-                  <Text
-                    style={
-                      isMine ? styles.myMessageText : styles.contactMessageText
+                return (
+                  <TouchableOpacity
+                    onLongPress={() => handleLongPress(item)}
+                    onPress={() =>
+                      selectedMessages.length > 0 && toggleSelect(item)
                     }
                   >
-                    {displayText(item)}
-                  </Text>
-                  <Text style={styles.timestamp}>
-                    {formatTime(item.timestamp)}
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          );
-        }}
-        contentContainerStyle={{ paddingVertical: 10, paddingBottom: 60 }}
-      />
+                    <View
+                      style={[
+                        styles.messageWrapper,
+                        isMine
+                          ? styles.myMessageWrapper
+                          : styles.contactMessageWrapper,
+                        selectedMessages.some((m) => m.id === item.id) && {
+                          backgroundColor: 'rgba(0,0,255,0.2)',
+                          borderRadius: 10,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={
+                          isMine
+                            ? styles.myMessageContainer
+                            : styles.contactMessageContainer
+                        }
+                      >
+                        <Text
+                          style={
+                            isMine
+                              ? styles.myMessageText
+                              : styles.contactMessageText
+                          }
+                        >
+                          {displayText(item)}
+                        </Text>
+                        <Text style={styles.timestamp}>
+                          {formatTime(item.timestamp)}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+            />
 
-      <View style={styles.inputContainer}>
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          placeholder="Escribe un mensaje..."
-          style={styles.input}
-          multiline
-        />
-        <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
-          <Text style={styles.sendText}>Enviar</Text>
-        </TouchableOpacity>
+            {/* INPUT COMO WHATSAPP */}
+            <View style={styles.inputContainer}>
+              <TextInput
+                value={input}
+                onChangeText={setInput}
+                placeholder="Escribe un mensaje..."
+                style={styles.input}
+                multiline
+              />
+              <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
+                <Text style={styles.sendText}>
+                  {' '}
+                  <Ionicons name="send" size={22} color="#fff" />
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </View>
-    </KeyboardAvoidingView>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -422,27 +473,35 @@ const styles = StyleSheet.create({
   },
 
   inputContainer: {
+    position: 'relative',
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     paddingVertical: 8,
     paddingHorizontal: 10,
-    backgroundColor: '#fff',
+    //backgroundColor: '#fff',
     borderTopWidth: 1,
     borderColor: '#ddd',
   },
   input: {
     flex: 1,
-    backgroundColor: '#f1f1f1',
+    backgroundColor: '#646464ff',
+    color: '#fff',
     borderRadius: 25,
     paddingHorizontal: 16,
     fontSize: 16,
   },
   sendButton: {
-    backgroundColor: '#34B7F1',
-    borderRadius: 25,
-    paddingHorizontal: 18,
+    backgroundColor: '#248588',
+    borderRadius: 50,
+    //paddingHorizontal: 18,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
+    height: 50,
+    width: 50,
+    alignSelf: 'flex-end',
   },
   sendText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 
